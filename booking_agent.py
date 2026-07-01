@@ -138,7 +138,6 @@ class ToolExecutor:
             # Query existing bookings
             response = BOOKINGS_TABLE.query(
                 KeyConditionExpression='RoomID = :rid',
-                ExpressionAttributeValues={':rid': room_id},
                 FilterExpression='BookingStatus = :status',
                 ExpressionAttributeValues={
                     ':rid': room_id,

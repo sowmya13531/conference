@@ -15,6 +15,10 @@ dependencies = [
     "botocore>=1.31.85",
     "python-dateutil>=2.8.2",
     "pydantic>=2.5.0",
+    "bedrock-agentcore",
+    "bedrock-agentcore-starter-toolkit",
+    "strands-agents",
+    "strands-agents-tools"
 ]
 
 [project.optional-dependencies]
@@ -27,7 +31,6 @@ dev = [
 ]
 
 [tool.uv]
-channels = ["pypi"]
 index-url = "https://pypi.org/simple"
 
 [tool.black]

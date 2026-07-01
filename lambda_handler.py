@@ -6,7 +6,7 @@ Integrates with AWS Bedrock AgentCore
 import json
 import boto3
 import logging
-from booking_agent_fixed import (
+from booking_agent import (
     BookingRequest, 
     BookingOrchestrator,
     BookingStatus

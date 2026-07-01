@@ -1,0 +1,59 @@
+[project]
+name = "conference-room-booking"
+version = "1.0.0"
+description = "Conference Room Booking Multi-Agent System for AWS Bedrock"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "Confidential - Tachyon Technologies"}
+authors = [
+    {name = "Tachyon Technologies", email = "info@tachyon.tech"}
+]
+keywords = ["aws", "bedrock", "agents", "dynamodb", "booking"]
+
+dependencies = [
+    "boto3>=1.28.85",
+    "botocore>=1.31.85",
+    "python-dateutil>=2.8.2",
+    "pydantic>=2.5.0",
+
+    "bedrock-agentcore",
+    "bedrock-agentcore-starter-toolkit",
+
+    "strands-agents",
+    "strands-agents-tools",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.9.0",
+    "isort>=5.12.0",
+    "pylint>=2.17.0",
+]
+
+[tool.uv]
+channels = ["pypi"]
+index-url = "https://pypi.org/simple"
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+multi_line_mode = 3
+line_length = 100
+
+[tool.pylint]
+max-line-length = 100
+disable = [
+    "C0103",  # Invalid name
+    "R0903",  # Too few public methods
+    "R0913",  # Too many arguments
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

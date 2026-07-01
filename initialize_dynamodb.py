@@ -1,138 +1,99 @@
 """
-Initialize DynamoDB Tables and Seed Data
-Run this script once to set up the database
+DynamoDB Initialization Script
+Creates tables and seeds sample data for Conference Room Booking System
+Run this once to set up the database
 """
 
 import boto3
-import time
-from datetime import datetime
-import logging
+import json
+from datetime import datetime, timedelta
+import sys
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
+# AWS DynamoDB Client
 dynamodb = boto3.resource('dynamodb', region_name='ap-south-1')
 
-
-def create_employees_table():
-    """Create Employees table"""
-    try:
-        table = dynamodb.create_table(
-            TableName='Employees',
-            KeySchema=[
-                {'AttributeName': 'EmployeeID', 'KeyType': 'HASH'}
-            ],
-            AttributeDefinitions=[
-                {'AttributeName': 'EmployeeID', 'AttributeType': 'S'}
-            ],
-            BillingMode='PAY_PER_REQUEST'
-        )
-        
-        table.meta.client.get_waiter('table_exists').wait(TableName='Employees')
-        logger.info("✓ Employees table created")
-        return table
-    except dynamodb.meta.client.exceptions.ResourceInUseException:
-        logger.info("✓ Employees table already exists")
-        return dynamodb.Table('Employees')
-
-
-def create_conference_rooms_table():
-    """Create ConferenceRooms table"""
-    try:
-        table = dynamodb.create_table(
-            TableName='ConferenceRooms',
-            KeySchema=[
-                {'AttributeName': 'RoomID', 'KeyType': 'HASH'}
-            ],
-            AttributeDefinitions=[
-                {'AttributeName': 'RoomID', 'AttributeType': 'S'}
-            ],
-            BillingMode='PAY_PER_REQUEST'
-        )
-        
-        table.meta.client.get_waiter('table_exists').wait(TableName='ConferenceRooms')
-        logger.info("✓ ConferenceRooms table created")
-        return table
-    except dynamodb.meta.client.exceptions.ResourceInUseException:
-        logger.info("✓ ConferenceRooms table already exists")
-        return dynamodb.Table('ConferenceRooms')
+# Table names
+TABLES_TO_CREATE = {
+    'Employees': {
+        'KeySchema': [{'AttributeName': 'EmployeeID', 'KeyType': 'HASH'}],
+        'AttributeDefinitions': [{'AttributeName': 'EmployeeID', 'AttributeType': 'S'}],
+        'BillingMode': 'PAY_PER_REQUEST'
+    },
+    'ConferenceRooms': {
+        'KeySchema': [{'AttributeName': 'RoomID', 'KeyType': 'HASH'}],
+        'AttributeDefinitions': [{'AttributeName': 'RoomID', 'AttributeType': 'S'}],
+        'BillingMode': 'PAY_PER_REQUEST'
+    },
+    'Bookings': {
+        'KeySchema': [
+            {'AttributeName': 'RoomID', 'KeyType': 'HASH'},
+            {'AttributeName': 'StartTime', 'KeyType': 'RANGE'}
+        ],
+        'AttributeDefinitions': [
+            {'AttributeName': 'RoomID', 'AttributeType': 'S'},
+            {'AttributeName': 'StartTime', 'AttributeType': 'S'}
+        ],
+        'BillingMode': 'PAY_PER_REQUEST'
+    },
+    'RoomFeatures': {
+        'KeySchema': [
+            {'AttributeName': 'RoomID', 'KeyType': 'HASH'},
+            {'AttributeName': 'FeatureName', 'KeyType': 'RANGE'}
+        ],
+        'AttributeDefinitions': [
+            {'AttributeName': 'RoomID', 'AttributeType': 'S'},
+            {'AttributeName': 'FeatureName', 'AttributeType': 'S'}
+        ],
+        'BillingMode': 'PAY_PER_REQUEST'
+    },
+    'AccessLevels': {
+        'KeySchema': [{'AttributeName': 'AccessLevelID', 'KeyType': 'HASH'}],
+        'AttributeDefinitions': [{'AttributeName': 'AccessLevelID', 'AttributeType': 'S'}],
+        'BillingMode': 'PAY_PER_REQUEST'
+    }
+}
 
 
-def create_bookings_table():
-    """Create Bookings table with composite key"""
-    try:
-        table = dynamodb.create_table(
-            TableName='Bookings',
-            KeySchema=[
-                {'AttributeName': 'RoomID', 'KeyType': 'HASH'},
-                {'AttributeName': 'StartTime', 'KeyType': 'RANGE'}
-            ],
-            AttributeDefinitions=[
-                {'AttributeName': 'RoomID', 'AttributeType': 'S'},
-                {'AttributeName': 'StartTime', 'AttributeType': 'S'}
-            ],
-            BillingMode='PAY_PER_REQUEST'
-        )
-        
-        table.meta.client.get_waiter('table_exists').wait(TableName='Bookings')
-        logger.info("✓ Bookings table created")
-        return table
-    except dynamodb.meta.client.exceptions.ResourceInUseException:
-        logger.info("✓ Bookings table already exists")
-        return dynamodb.Table('Bookings')
-
-
-def create_room_features_table():
-    """Create RoomFeatures table"""
-    try:
-        table = dynamodb.create_table(
-            TableName='RoomFeatures',
-            KeySchema=[
-                {'AttributeName': 'RoomID', 'KeyType': 'HASH'},
-                {'AttributeName': 'FeatureName', 'KeyType': 'RANGE'}
-            ],
-            AttributeDefinitions=[
-                {'AttributeName': 'RoomID', 'AttributeType': 'S'},
-                {'AttributeName': 'FeatureName', 'AttributeType': 'S'}
-            ],
-            BillingMode='PAY_PER_REQUEST'
-        )
-        
-        table.meta.client.get_waiter('table_exists').wait(TableName='RoomFeatures')
-        logger.info("✓ RoomFeatures table created")
-        return table
-    except dynamodb.meta.client.exceptions.ResourceInUseException:
-        logger.info("✓ RoomFeatures table already exists")
-        return dynamodb.Table('RoomFeatures')
-
-
-def create_access_levels_table():
-    """Create AccessLevels table"""
-    try:
-        table = dynamodb.create_table(
-            TableName='AccessLevels',
-            KeySchema=[
-                {'AttributeName': 'AccessLevelID', 'KeyType': 'HASH'}
-            ],
-            AttributeDefinitions=[
-                {'AttributeName': 'AccessLevelID', 'AttributeType': 'S'}
-            ],
-            BillingMode='PAY_PER_REQUEST'
-        )
-        
-        table.meta.client.get_waiter('table_exists').wait(TableName='AccessLevels')
-        logger.info("✓ AccessLevels table created")
-        return table
-    except dynamodb.meta.client.exceptions.ResourceInUseException:
-        logger.info("✓ AccessLevels table already exists")
-        return dynamodb.Table('AccessLevels')
+def create_tables():
+    """Create all required DynamoDB tables"""
+    print("Creating DynamoDB tables...")
+    
+    for table_name, table_config in TABLES_TO_CREATE.items():
+        try:
+            # Check if table already exists
+            existing_tables = dynamodb.meta.client.list_tables()['TableNames']
+            
+            if table_name in existing_tables:
+                print(f"✓ Table '{table_name}' already exists, skipping creation")
+                continue
+            
+            # Create table
+            table = dynamodb.create_table(
+                TableName=table_name,
+                KeySchema=table_config['KeySchema'],
+                AttributeDefinitions=table_config['AttributeDefinitions'],
+                BillingMode=table_config['BillingMode']
+            )
+            
+            # Wait for table to be created
+            print(f"Creating table '{table_name}'... ", end='', flush=True)
+            table.wait_until_exists()
+            print("✓")
+            
+        except Exception as e:
+            print(f"✗ Error creating table '{table_name}': {str(e)}")
+            return False
+    
+    print("\n✓ All tables created successfully!\n")
+    return True
 
 
 def seed_access_levels():
-    """Seed access levels"""
+    """Seed access levels data"""
+    print("Seeding Access Levels...")
     table = dynamodb.Table('AccessLevels')
     
-    levels = [
+    access_levels = [
         {
             'AccessLevelID': 'BASIC',
             'Name': 'Basic Access',
@@ -163,14 +124,16 @@ def seed_access_levels():
         }
     ]
     
-    for level in levels:
+    for level in access_levels:
         table.put_item(Item=level)
+        print(f"  ✓ {level['AccessLevelID']}: {level['Description']}")
     
-    logger.info(f"✓ Seeded {len(levels)} access levels")
+    print()
 
 
 def seed_employees():
     """Seed employee data"""
+    print("Seeding Employees...")
     table = dynamodb.Table('Employees')
     
     employees = [
@@ -216,238 +179,256 @@ def seed_employees():
         }
     ]
     
-    for emp in employees:
-        table.put_item(Item=emp)
+    for employee in employees:
+        table.put_item(Item=employee)
+        print(f"  ✓ {employee['EmployeeID']}: {employee['Name']} ({employee['AccessLevel']})")
     
-    logger.info(f"✓ Seeded {len(employees)} employees")
+    print()
 
 
 def seed_conference_rooms():
     """Seed conference room data"""
+    print("Seeding Conference Rooms...")
     table = dynamodb.Table('ConferenceRooms')
     
     rooms = [
         {
             'RoomID': 'R001',
             'RoomName': 'Innovation Hub',
-            'Capacity': 20,
             'Location': 'Building A, Floor 2',
             'Floor': '2',
+            'Capacity': 20,
             'RequiredAccessLevel': 'BASIC',
-            'Amenities': 'Whiteboard, 4K Display, Video Conferencing',
+            'Amenities': 'Whiteboard, 4K Display',
             'CreatedAt': datetime.utcnow().isoformat()
         },
         {
             'RoomID': 'R002',
             'RoomName': 'Board Room',
+            'Location': 'Building A, Floor 5',
+            'Floor': '5',
             'Capacity': 15,
-            'Location': 'Building A, Floor 3',
-            'Floor': '3',
             'RequiredAccessLevel': 'STANDARD',
-            'Amenities': 'Speakerphone, Video Conferencing, 4K Display',
+            'Amenities': 'Video Conference System, Projector',
             'CreatedAt': datetime.utcnow().isoformat()
         },
         {
             'RoomID': 'R003',
             'RoomName': 'Executive Suite',
+            'Location': 'Building B, Floor 8',
+            'Floor': '8',
             'Capacity': 10,
-            'Location': 'Building B, Floor 1',
-            'Floor': '1',
             'RequiredAccessLevel': 'PREMIUM',
-            'Amenities': 'Premium AV, Secure Phone, 8K Display',
+            'Amenities': 'Premium Sound System, Secure Phone Lines',
             'CreatedAt': datetime.utcnow().isoformat()
         },
         {
             'RoomID': 'R004',
             'RoomName': 'Training Center',
+            'Location': 'Building A, Floor 3',
+            'Floor': '3',
             'Capacity': 30,
-            'Location': 'Building C, Floor 1',
-            'Floor': '1',
             'RequiredAccessLevel': 'BASIC',
-            'Amenities': 'Projector, Multiple Screens, Recording Capability',
+            'Amenities': 'Projector, Multiple Screens',
             'CreatedAt': datetime.utcnow().isoformat()
         },
         {
             'RoomID': 'R005',
             'RoomName': 'Client Meeting Room',
-            'Capacity': 8,
-            'Location': 'Building A, Floor 1',
+            'Location': 'Building C, Floor 1',
             'Floor': '1',
+            'Capacity': 8,
             'RequiredAccessLevel': 'STANDARD',
-            'Amenities': 'Video Conferencing, Projector, Coffee Station',
+            'Amenities': 'Video Conference, Coffee Station',
             'CreatedAt': datetime.utcnow().isoformat()
         },
         {
             'RoomID': 'R006',
             'RoomName': 'C-Suite Presidential Suite',
+            'Location': 'Building B, Floor 10',
+            'Floor': '10',
             'Capacity': 5,
-            'Location': 'Building B, Floor 5',
-            'Floor': '5',
             'RequiredAccessLevel': 'EXECUTIVE',
-            'Amenities': 'Premium AV, Smart Controls, Secure Lines',
+            'Amenities': 'Premium AV System, Private Elevator Access',
             'CreatedAt': datetime.utcnow().isoformat()
         }
     ]
     
     for room in rooms:
         table.put_item(Item=room)
+        print(f"  ✓ {room['RoomID']}: {room['RoomName']} (Capacity: {room['Capacity']}, Access: {room['RequiredAccessLevel']})")
     
-    logger.info(f"✓ Seeded {len(rooms)} conference rooms")
+    print()
 
 
 def seed_room_features():
-    """Seed room features"""
+    """Seed room features data"""
+    print("Seeding Room Features...")
     table = dynamodb.Table('RoomFeatures')
     
     features = [
-        # R001 Features
-        {'RoomID': 'R001', 'FeatureName': 'Projector', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R001', 'FeatureName': 'Video Conferencing', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R001', 'FeatureName': 'Whiteboard', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R001', 'FeatureName': 'High Speed Internet', 'AddedAt': datetime.utcnow().isoformat()},
-        # R002 Features
-        {'RoomID': 'R002', 'FeatureName': 'Projector', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R002', 'FeatureName': 'Video Conferencing', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R002', 'FeatureName': 'Speakerphone', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R002', 'FeatureName': '4K Display', 'AddedAt': datetime.utcnow().isoformat()},
-        # R003 Features
-        {'RoomID': 'R003', 'FeatureName': 'Video Conferencing', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R003', 'FeatureName': 'Secure Phone Lines', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R003', 'FeatureName': 'Premium Sound System', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R003', 'FeatureName': '8K Display', 'AddedAt': datetime.utcnow().isoformat()},
-        # R004 Features
-        {'RoomID': 'R004', 'FeatureName': 'Projector', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R004', 'FeatureName': 'Multiple Screens', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R004', 'FeatureName': 'Whiteboard', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R004', 'FeatureName': 'Recording Capability', 'AddedAt': datetime.utcnow().isoformat()},
-        # R005 Features
-        {'RoomID': 'R005', 'FeatureName': 'Video Conferencing', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R005', 'FeatureName': 'Projector', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R005', 'FeatureName': 'Coffee Station', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R005', 'FeatureName': '4K Display', 'AddedAt': datetime.utcnow().isoformat()},
-        # R006 Features
-        {'RoomID': 'R006', 'FeatureName': 'Premium AV System', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R006', 'FeatureName': 'Video Conferencing', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R006', 'FeatureName': 'Secure Phone Lines', 'AddedAt': datetime.utcnow().isoformat()},
-        {'RoomID': 'R006', 'FeatureName': 'Smart Controls', 'AddedAt': datetime.utcnow().isoformat()},
+        # R001 - Innovation Hub
+        ('R001', 'Projector'),
+        ('R001', 'Video Conferencing'),
+        ('R001', 'Whiteboard'),
+        ('R001', 'High Speed Internet'),
+        
+        # R002 - Board Room
+        ('R002', 'Projector'),
+        ('R002', 'Video Conferencing'),
+        ('R002', 'Speakerphone'),
+        ('R002', '4K Display'),
+        
+        # R003 - Executive Suite
+        ('R003', 'Video Conferencing'),
+        ('R003', 'Secure Phone Lines'),
+        ('R003', 'Premium Sound System'),
+        ('R003', '8K Display'),
+        
+        # R004 - Training Center
+        ('R004', 'Projector'),
+        ('R004', 'Multiple Screens'),
+        ('R004', 'Whiteboard'),
+        ('R004', 'Recording Capability'),
+        
+        # R005 - Client Meeting Room
+        ('R005', 'Video Conferencing'),
+        ('R005', 'Projector'),
+        ('R005', 'Coffee Station'),
+        ('R005', '4K Display'),
+        
+        # R006 - C-Suite Presidential Suite
+        ('R006', 'Premium AV System'),
+        ('R006', 'Video Conferencing'),
+        ('R006', 'Secure Phone Lines'),
+        ('R006', 'Smart Controls'),
     ]
     
-    for feature in features:
-        table.put_item(Item=feature)
+    for room_id, feature in features:
+        table.put_item(Item={
+            'RoomID': room_id,
+            'FeatureName': feature,
+            'AddedAt': datetime.utcnow().isoformat()
+        })
+        print(f"  ✓ {room_id}: {feature}")
     
-    logger.info(f"✓ Seeded {len(features)} room features")
+    print()
 
 
 def seed_sample_bookings():
-    """Seed sample bookings for testing"""
+    """Seed sample booking data for testing"""
+    print("Seeding Sample Bookings...")
     table = dynamodb.Table('Bookings')
+    
+    base_date = datetime.utcnow()
     
     bookings = [
         {
+            'BookingID': 'B001',
             'RoomID': 'R001',
-            'StartTime': '2026-01-16T02:00:00',
-            'BookingID': '550e8400-e29b-41d4-a716-446655440001',
+            'StartTime': (base_date + timedelta(hours=2)).isoformat(),
+            'EndTime': (base_date + timedelta(hours=3)).isoformat(),
             'EmployeeID': 'E001',
-            'EndTime': '2026-01-16T03:00:00',
-            'AttendeeCount': 5,
+            'AttendeeCount': 10,
             'MeetingTitle': 'Team Standup',
             'BookingStatus': 'CONFIRMED',
-            'CreatedAt': datetime.utcnow().isoformat(),
-            'UpdatedAt': datetime.utcnow().isoformat()
+            'CreatedAt': base_date.isoformat(),
+            'UpdatedAt': base_date.isoformat()
         },
         {
+            'BookingID': 'B002',
             'RoomID': 'R002',
-            'StartTime': '2026-01-16T04:00:00',
-            'BookingID': '550e8400-e29b-41d4-a716-446655440002',
+            'StartTime': (base_date + timedelta(hours=4)).isoformat(),
+            'EndTime': (base_date + timedelta(hours=6)).isoformat(),
             'EmployeeID': 'E002',
-            'EndTime': '2026-01-16T06:00:00',
             'AttendeeCount': 8,
             'MeetingTitle': 'Product Review',
             'BookingStatus': 'CONFIRMED',
-            'CreatedAt': datetime.utcnow().isoformat(),
-            'UpdatedAt': datetime.utcnow().isoformat()
+            'CreatedAt': base_date.isoformat(),
+            'UpdatedAt': base_date.isoformat()
         },
         {
+            'BookingID': 'B003',
             'RoomID': 'R004',
-            'StartTime': '2026-01-16T01:00:00',
-            'BookingID': '550e8400-e29b-41d4-a716-446655440003',
+            'StartTime': (base_date + timedelta(hours=1)).isoformat(),
+            'EndTime': (base_date + timedelta(hours=2)).isoformat(),
             'EmployeeID': 'E003',
-            'EndTime': '2026-01-16T02:00:00',
-            'AttendeeCount': 15,
+            'AttendeeCount': 25,
             'MeetingTitle': 'Training Session',
             'BookingStatus': 'CONFIRMED',
-            'CreatedAt': datetime.utcnow().isoformat(),
-            'UpdatedAt': datetime.utcnow().isoformat()
+            'CreatedAt': base_date.isoformat(),
+            'UpdatedAt': base_date.isoformat()
         }
     ]
     
     for booking in bookings:
         table.put_item(Item=booking)
+        print(f"  ✓ {booking['BookingID']}: {booking['MeetingTitle']} at {booking['RoomID']}")
     
-    logger.info(f"✓ Seeded {len(bookings)} sample bookings")
+    print()
 
 
 def verify_tables():
-    """Verify all tables exist"""
-    try:
-        tables = ['Employees', 'ConferenceRooms', 'Bookings', 'RoomFeatures', 'AccessLevels']
-        existing_tables = dynamodb.meta.client.list_tables()['TableNames']
-        
-        for table_name in tables:
-            if table_name in existing_tables:
-                logger.info(f"✓ {table_name} table verified")
-            else:
-                logger.error(f"✗ {table_name} table NOT found")
-                return False
-        
-        return True
-    except Exception as e:
-        logger.error(f"Error verifying tables: {str(e)}")
-        return False
+    """Verify all tables were created successfully"""
+    print("Verifying tables...")
+    existing_tables = dynamodb.meta.client.list_tables()['TableNames']
+    
+    for table_name in TABLES_TO_CREATE.keys():
+        if table_name in existing_tables:
+            table = dynamodb.Table(table_name)
+            item_count = table.item_count
+            print(f"  ✓ {table_name} (Items: {item_count})")
+        else:
+            print(f"  ✗ {table_name} (NOT FOUND)")
+            return False
+    
+    print("\n✓ All tables verified successfully!\n")
+    return True
 
 
 def main():
     """Main initialization function"""
-    logger.info("=" * 60)
-    logger.info("DynamoDB Table Initialization & Seeding")
-    logger.info("=" * 60)
+    print("=" * 60)
+    print("Conference Room Booking System - DynamoDB Initialization")
+    print("=" * 60)
+    print()
     
     try:
-        # Create tables
-        logger.info("\n[1/3] Creating DynamoDB tables...")
-        create_access_levels_table()
-        create_employees_table()
-        create_conference_rooms_table()
-        create_bookings_table()
-        create_room_features_table()
+        # Step 1: Create tables
+        if not create_tables():
+            print("✗ Failed to create tables. Aborting.")
+            return False
         
-        # Wait for table creation
-        time.sleep(2)
-        
-        # Seed data
-        logger.info("\n[2/3] Seeding data...")
+        # Step 2: Seed data
         seed_access_levels()
         seed_employees()
         seed_conference_rooms()
         seed_room_features()
         seed_sample_bookings()
         
-        # Verify
-        logger.info("\n[3/3] Verifying tables...")
-        if verify_tables():
-            logger.info("\n" + "=" * 60)
-            logger.info("✓ DATABASE INITIALIZATION COMPLETE!")
-            logger.info("=" * 60)
-            return True
-        else:
-            logger.error("\n✗ Table verification failed")
+        # Step 3: Verify
+        if not verify_tables():
+            print("✗ Verification failed.")
             return False
-            
+        
+        print("=" * 60)
+        print("✓ Database initialization completed successfully!")
+        print("=" * 60)
+        print()
+        print("Sample Data Summary:")
+        print(f"  • Access Levels: 4 levels (BASIC, STANDARD, PREMIUM, EXECUTIVE)")
+        print(f"  • Employees: 5 employees with varying access levels")
+        print(f"  • Rooms: 6 conference rooms with different capacities")
+        print(f"  • Features: 23 room features distributed across rooms")
+        print(f"  • Sample Bookings: 3 existing bookings for reference")
+        print()
+        return True
+        
     except Exception as e:
-        logger.error(f"Error during initialization: {str(e)}")
+        print(f"✗ Fatal error: {str(e)}")
         return False
 
 
 if __name__ == '__main__':
     success = main()
-    exit(0 if success else 1)
+    sys.exit(0 if success else 1)
