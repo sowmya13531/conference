@@ -191,7 +191,20 @@ class ToolExecutor:
             
             start = datetime.fromisoformat(start_time)
             end = datetime.fromisoformat(end_time)
-            
+
+            # Reject non-positive duration up front — without this check a
+            # request with end_time <= start_time silently produces a
+            # negative "duration_hours" and sails through to
+            # PENDING_CONFIRMATION as if it were a valid booking.
+            if end <= start:
+                return {
+                    "duration_hours": None,
+                    "duration_minutes": None,
+                    "max_allowed_hours": None,
+                    "within_limit": False,
+                    "error": f"end_time ({end_time}) must be after start_time ({start_time})",
+                }
+
             delta = end - start
             hours = delta.total_seconds() / 3600
             minutes = (delta.total_seconds() % 3600) / 60
@@ -360,6 +373,81 @@ class ToolExecutor:
                 'booking_id': None,
                 'status': 'FAILED',
                 'error': f'Booking creation failed: {str(e)}'
+            }
+
+    @staticmethod
+    def cancel_existing_booking(employee_id: str, room_id: str, start_time: str) -> Dict:
+        """
+        Cancel an already-CONFIRMED booking in DynamoDB.
+
+        Looks the booking up by its (RoomID, StartTime) key — the same key
+        create_booking() writes to — verifies it exists, is currently
+        CONFIRMED (not already cancelled), and that the requesting employee
+        is the one who made the original booking, then flips its status to
+        CANCELLED via UpdateItem (does not delete the record, preserving an
+        audit trail).
+
+        Args:
+            employee_id: Employee requesting the cancellation
+            room_id: Room of the booking to cancel
+            start_time: Start time of the booking to cancel (ISO 8601) — must
+                match exactly, since it's part of the table's key
+
+        Returns:
+            Dict with success status and details
+        """
+        try:
+            existing = BOOKINGS_TABLE.get_item(
+                Key={'RoomID': room_id, 'StartTime': start_time}
+            ).get('Item')
+
+            if not existing:
+                return {
+                    'success': False,
+                    'error': f'No booking found for room {room_id} at {start_time}',
+                }
+
+            if existing.get('BookingStatus') == 'CANCELLED':
+                return {
+                    'success': False,
+                    'error': f"Booking {existing.get('BookingID')} is already cancelled",
+                }
+
+            if existing.get('EmployeeID') != employee_id:
+                return {
+                    'success': False,
+                    'error': (
+                        f"Employee {employee_id} is not authorized to cancel this booking "
+                        f"(booked by {existing.get('EmployeeID')})"
+                    ),
+                }
+
+            updated_at = datetime.utcnow().isoformat()
+
+            BOOKINGS_TABLE.update_item(
+                Key={'RoomID': room_id, 'StartTime': start_time},
+                UpdateExpression='SET BookingStatus = :status, UpdatedAt = :updated_at',
+                ExpressionAttributeValues={
+                    ':status': 'CANCELLED',
+                    ':updated_at': updated_at,
+                },
+            )
+
+            logger.info(f"Booking cancelled: {existing.get('BookingID')}")
+
+            return {
+                'success': True,
+                'booking_id': existing.get('BookingID'),
+                'status': 'CANCELLED',
+                'cancelled_at': updated_at,
+                'error': None,
+            }
+
+        except Exception as e:
+            logger.error(f"Error cancelling booking: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Booking cancellation failed: {str(e)}',
             }
 
 
@@ -603,6 +691,45 @@ class BookingOrchestrator:
                 'message': f'Booking confirmation failed: {str(e)}',
                 'database_record_created': False,
                 'error': str(e)
+            }
+
+    def cancel_confirmed_booking(self, employee_id: str, room_id: str, start_time: str) -> Dict:
+        """
+        Cancel an existing CONFIRMED booking.
+
+        Args:
+            employee_id: Employee requesting the cancellation (must match
+                the original booker)
+            room_id: Room of the booking to cancel
+            start_time: Start time of the booking to cancel (ISO 8601)
+
+        Returns:
+            Dict with cancellation result
+        """
+        try:
+            result = ToolExecutor.cancel_existing_booking(employee_id, room_id, start_time)
+
+            if not result.get('success'):
+                return {
+                    'status': BookingStatus.FAILED.value,
+                    'message': result.get('error'),
+                    'error': result.get('error'),
+                }
+
+            return {
+                'status': BookingStatus.CANCELLED.value,
+                'booking_id': result.get('booking_id'),
+                'cancelled_at': result.get('cancelled_at'),
+                'message': 'Booking cancelled successfully',
+                'error': None,
+            }
+
+        except Exception as e:
+            logger.error(f"Error in cancel_confirmed_booking: {str(e)}")
+            return {
+                'status': BookingStatus.FAILED.value,
+                'message': f'Cancellation failed: {str(e)}',
+                'error': str(e),
             }
     
     async def _async_verify_access(self, employee_id: str, room_id: str) -> Dict:

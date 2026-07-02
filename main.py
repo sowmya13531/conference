@@ -71,14 +71,19 @@ async def invoke(payload: Dict[str, Any]) -> Dict[str, Any]:
     AgentCore Runtime Entry Point
 
     Accepted payload keys:
-      action         : "sequential" | "parallel" | "confirm"
+      action         : "sequential" | "parallel" | "confirm" | "cancel"
       employee_id    : str  e.g. "E001"
       room_id        : str  e.g. "R001"
       start_time     : ISO-8601 str  e.g. "2026-07-01T10:00:00"
-      end_time       : ISO-8601 str  e.g. "2026-07-01T12:00:00"
-      attendee_count : int  e.g. 5
-      meeting_title  : str  e.g. "Team Sync"
+      end_time       : ISO-8601 str  e.g. "2026-07-01T12:00:00"  (not required for action="cancel")
+      attendee_count : int  e.g. 5  (not required for action="cancel")
+      meeting_title  : str  e.g. "Team Sync"  (not required for action="cancel")
       confirmed      : bool (only required for action="confirm")
+
+    action="cancel" only requires employee_id, room_id, and start_time — it
+    looks up an existing CONFIRMED booking by its (room_id, start_time) key,
+    verifies the requesting employee is the original booker, and marks it
+    CANCELLED (does not delete the record).
     """
 
     logger.info("AgentCore invocation received ??? action=%s", payload.get("action"))
@@ -86,7 +91,37 @@ async def invoke(payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
         action = payload.get("action", "sequential").lower()
 
-        # ?????? Validate required fields ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+        if action not in ("sequential", "parallel", "confirm", "cancel"):
+            return {
+                "status": "FAILED",
+                "error": f"Unknown action '{action}'. Use: sequential | parallel | confirm | cancel",
+            }
+
+        # ── "cancel" only needs enough to identify an existing booking by
+        # its (RoomID, StartTime) key — not the full booking field set ──
+        if action == "cancel":
+            cancel_required = ["employee_id", "room_id", "start_time"]
+            missing = [f for f in cancel_required if f not in payload]
+            if missing:
+                return {
+                    "status": "FAILED",
+                    "error": f"Missing required fields: {', '.join(missing)}",
+                }
+            logger.info(
+                "CANCEL workflow — employee=%s room=%s start=%s",
+                payload["employee_id"], payload["room_id"], payload["start_time"],
+            )
+            orchestrator = BookingOrchestrator()
+            result = orchestrator.cancel_confirmed_booking(
+                employee_id=str(payload["employee_id"]),
+                room_id=str(payload["room_id"]),
+                start_time=str(payload["start_time"]),
+            )
+            result = _make_json_safe(result)
+            logger.info("Invocation complete — status=%s", result.get("status"))
+            return result
+
+        # ── Validate required fields for sequential/parallel/confirm ────────
         required = ["employee_id", "room_id", "start_time", "end_time",
                     "attendee_count", "meeting_title"]
         missing = [f for f in required if f not in payload]
@@ -96,13 +131,7 @@ async def invoke(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "error": f"Missing required fields: {', '.join(missing)}",
             }
 
-        if action not in ("sequential", "parallel", "confirm"):
-            return {
-                "status": "FAILED",
-                "error": f"Unknown action '{action}'. Use: sequential | parallel | confirm",
-            }
-
-        # ?????? Build BookingRequest ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+        # ── Build BookingRequest ─────────────────────────────────────────────
         booking = BookingRequest(
             employee_id=str(payload["employee_id"]),
             room_id=str(payload["room_id"]),
@@ -114,17 +143,17 @@ async def invoke(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         orchestrator = BookingOrchestrator()
 
-        # ?????? Route action ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+        # ── Route action ─────────────────────────────────────────────────────
         if action == "sequential":
             logger.info(
-                "SEQUENTIAL workflow ??? employee=%s room=%s",
+                "SEQUENTIAL workflow — employee=%s room=%s",
                 booking.employee_id, booking.room_id,
             )
             result = await orchestrator.execute_sequential(booking)
 
         elif action == "parallel":
             logger.info(
-                "PARALLEL workflow ??? employee=%s room=%s",
+                "PARALLEL workflow — employee=%s room=%s",
                 booking.employee_id, booking.room_id,
             )
             # Run both I/O-bound checks in a thread pool, then merge

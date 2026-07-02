@@ -92,7 +92,7 @@ agents:
     bedrock_agentcore:
       agent_id: conference_booking_agent_v2-9qR8P3GJsG
       agent_arn: arn:aws:bedrock-agentcore:ap-south-1:211374268044:runtime/conference_booking_agent_v2-9qR8P3GJsG
-      agent_session_id: 5e1ab3cf-565d-4a76-bae5-6ab0a3c46b21
+      agent_session_id: ce540a54-f847-40a7-a371-19bd5d3e8f5a
     codebuild:
       project_name: bedrock-agentcore-conference_booking_agent_v2-builder
       execution_role: arn:aws:iam::211374268044:role/AmazonBedrockAgentCoreSDKCodeBuild-ap-south-1-bd947a124c
