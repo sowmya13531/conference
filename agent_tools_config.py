@@ -1,23 +1,27 @@
 """
-Bedrock Agent Tool Definitions
-Defines all tools available to the Conference Room Booking Agent
+Conference Room Booking Agent — Tool Definitions & Agent Configuration
 
-NOTE: AGENT_CONFIG below (including the "model" field) is NOT currently
-consumed anywhere in main.py or booking_agent.py. The live pipeline invoked
-by AgentCore Runtime is deterministic Python logic against DynamoDB — no
-Bedrock model inference happens per-request today. This file appears to be
-leftover config from an earlier "AWS Bedrock Agents" (the managed-agent
-service) prototype, or scaffolding for a future natural-language-parsing
-layer that hasn't been wired into main.py's @app.entrypoint yet.
+Centralises two things used across the project:
 
-Changing "model" below to a Nova model ID will NOT reduce any current cost,
-because nothing currently calls Bedrock's InvokeModel/Converse API in this
-project. If you want an LLM to actually parse free-text prompts (e.g. "Book
-room A for tomorrow 3pm...") into the structured fields main.py requires,
-you'd need to add a call — via Strands' Agent/BedrockModel classes, or a
-direct bedrock-runtime Converse call — using this model ID, inside
-main.py's invoke() before building BookingRequest. Until that's added, this
-file is just reference metadata.
+1. TOOL_DEFINITIONS
+   JSON-schema descriptions of every tool the agent exposes.  These are the
+   canonical contracts imported by the Lambda handler (lambda_handler.py) and
+   can be registered directly with Bedrock Agents or any Strands Agent that
+   wraps this service.  Each schema maps 1-to-1 with a method on ToolExecutor
+   in booking_agent.py.
+
+2. AGENT_CONFIG
+   Runtime configuration for the Bedrock AgentCore deployment: model ID,
+   system instructions, tool list, and generation parameters.  The
+   instructions encode the full booking workflow and the per-access-level
+   booking limits so the model always follows the correct business rules.
+
+Model choice — amazon.nova-micro-v1:0
+   Nova Micro is the lowest-latency, lowest-cost Bedrock model that supports
+   structured tool-calling.  It is well-suited to this task because every
+   decision is deterministic (access hierarchy lookups, time arithmetic,
+   capacity comparisons) and the model's role is primarily orchestration and
+   natural-language summarisation rather than open-ended reasoning.
 """
 
 TOOL_DEFINITIONS = [

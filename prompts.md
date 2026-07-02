@@ -1,263 +1,311 @@
-"""
-Conference Room Booking Agent
-Amazon Bedrock AgentCore Runtime Entry Point
+# Sample Prompts — Conference Room Booking Agent
 
-This file is the entry point for Bedrock AgentCore Runtime.
-It uses the Strands Agents SDK with the bedrock_agentcore app wrapper.
-"""
+All payloads below were run live against the deployed `conference_booking_agent_v2` AgentCore
+Runtime and produced the responses shown (lightly reformatted for readability). Seed data
+reference:
 
-import logging
-import asyncio
-import concurrent.futures
-from decimal import Decimal
-from typing import Dict, Any
+| Employee | Access Level | Max booking |
+|---|---|---|
+| E001 Alice Johnson | EXECUTIVE | 24h |
+| E002 Bob Smith | PREMIUM | 8h |
+| E003 Carol Davis | STANDARD | 4h |
+| E004 David Wilson | BASIC | 2h |
 
-from bedrock_agentcore.runtime import BedrockAgentCoreApp
-from booking_agent import BookingOrchestrator, BookingRequest, ToolExecutor
+| Room | Capacity | Required access |
+|---|---|---|
+| R001 Innovation Hub | 20 | BASIC |
+| R003 Executive Suite | 10 | PREMIUM |
+| R004 Training Center | 30 | BASIC |
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-)
-logger = logging.getLogger(__name__)
+**Windows PowerShell note:** escape inner double quotes with backslashes, e.g.
+`agentcore invoke '{\"employee_id\": \"E001\", ...}'`.
 
-app = BedrockAgentCoreApp()
+---
 
+## 1. Happy Path (Sequential Execution)
 
-def _make_json_safe(obj: Any) -> Any:
-    """
-    Recursively convert DynamoDB Decimal values (and other non-JSON-native
-    types) into plain int/float so the AgentCore Runtime can cleanly
-    JSON-serialize the response (it falls back to Python repr — single
-    quotes — when it encounters un-serializable types like Decimal).
-    """
-    if isinstance(obj, Decimal):
-        return int(obj) if obj == obj.to_integral_value() else float(obj)
-    if isinstance(obj, dict):
-        return {k: _make_json_safe(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_make_json_safe(v) for v in obj]
-    return obj
+Employee lookup → access verification → availability check → duration calculation →
+confirmation prompt → booking creation, each step blocked on the previous.
 
+**Step 1 — request the booking:**
+```json
+{
+  "action": "sequential",
+  "employee_id": "E001",
+  "room_id": "R001",
+  "start_time": "2026-07-02T15:00:00",
+  "end_time": "2026-07-02T16:00:00",
+  "attendee_count": 5,
+  "meeting_title": "Team Sync"
+}
+```
 
-def _run_parallel_checks(booking: BookingRequest):
-    """
-    Truly parallel execution: access check and availability check run concurrently
-    using a ThreadPoolExecutor since DynamoDB calls are I/O bound.
-    """
-    executor = ToolExecutor()
+**Response:**
+```json
+{
+  "status": "PENDING_CONFIRMATION",
+  "confirmation_summary": {
+    "room_name": "Innovation Hub",
+    "room_capacity": 20,
+    "features": ["High Speed Internet", "Projector", "Video Conferencing", "Whiteboard"],
+    "location": "Building A, Floor 2",
+    "start_time": "2026-07-02T15:00:00",
+    "end_time": "2026-07-02T16:00:00",
+    "duration_hours": 1.0,
+    "attendee_count": 5,
+    "meeting_title": "Team Sync"
+  },
+  "execution_mode": "sequential",
+  "error": null
+}
+```
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        access_future = pool.submit(
-            executor.verify_employee_access,
-            booking.employee_id,
-            booking.room_id,
-        )
-        availability_future = pool.submit(
-            executor.check_room_availability,
-            booking.room_id,
-            booking.start_time,
-            booking.end_time,
-        )
-        access_result = access_future.result(timeout=15)
-        availability_result = availability_future.result(timeout=15)
+**Step 2 — confirm (YES):**
+```json
+{
+  "action": "confirm",
+  "employee_id": "E001",
+  "room_id": "R001",
+  "start_time": "2026-07-02T15:00:00",
+  "end_time": "2026-07-02T16:00:00",
+  "attendee_count": 5,
+  "meeting_title": "Team Sync",
+  "confirmed": true
+}
+```
 
-    return access_result, availability_result
+**Response:**
+```json
+{
+  "status": "CONFIRMED",
+  "booking_id": "7699262b-325e-414f-8c78-6cc3008388f7",
+  "created_at": "2026-07-01T04:57:19.083043",
+  "message": "Booking confirmed and saved",
+  "database_record_created": true,
+  "error": null
+}
+```
 
+---
 
-@app.entrypoint
-async def invoke(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    AgentCore Runtime Entry Point
+## 2. Parallel Execution
 
-    Accepted payload keys:
-      action         : "sequential" | "parallel" | "confirm"
-      employee_id    : str  e.g. "E001"
-      room_id        : str  e.g. "R001"
-      start_time     : ISO-8601 str  e.g. "2026-07-01T10:00:00"
-      end_time       : ISO-8601 str  e.g. "2026-07-01T12:00:00"
-      attendee_count : int  e.g. 5
-      meeting_title  : str  e.g. "Team Sync"
-      confirmed      : bool (only required for action="confirm")
-    """
+Access check and availability check run concurrently (via `ThreadPoolExecutor`); results are
+merged before duration and capacity validation.
 
-    logger.info("AgentCore invocation received — action=%s", payload.get("action"))
+**Request:**
+```json
+{
+  "action": "parallel",
+  "employee_id": "E001",
+  "room_id": "R004",
+  "start_time": "2026-07-04T09:00:00",
+  "end_time": "2026-07-04T10:00:00",
+  "attendee_count": 6,
+  "meeting_title": "Parallel Test"
+}
+```
 
-    try:
-        action = payload.get("action", "sequential").lower()
+**Response:**
+```json
+{
+  "workflow": "parallel",
+  "status": "PENDING_CONFIRMATION",
+  "parallel_execution_note": "Access check and availability check ran concurrently via ThreadPoolExecutor; results merged before duration and capacity validation.",
+  "confirmation_summary": {
+    "room_name": "Training Center",
+    "capacity": 30,
+    "features": ["Multiple Screens", "Projector", "Recording Capability", "Whiteboard"],
+    "start_time": "2026-07-04T09:00:00",
+    "end_time": "2026-07-04T10:00:00",
+    "duration_hours": 1.0,
+    "duration_minutes": 0.0,
+    "attendee_count": 6,
+    "meeting_title": "Parallel Test"
+  },
+  "access_result": {
+    "access_granted": true,
+    "employee_name": "Alice Johnson",
+    "access_level": "EXECUTIVE",
+    "room_required_level": "BASIC",
+    "error": null
+  },
+  "availability_result": {
+    "available": true,
+    "conflicts": [],
+    "buffer_minutes": 15,
+    "error": null
+  },
+  "duration_result": {
+    "duration_hours": 1.0,
+    "duration_minutes": 0.0,
+    "max_allowed_hours": 24,
+    "within_limit": true,
+    "error": null
+  },
+  "attendee_result": {
+    "capacity_sufficient": true,
+    "room_capacity": 30,
+    "attendee_count": 6,
+    "error": null
+  }
+}
+```
 
-        # ── Validate required fields ─────────────────────────────────────────
-        required = ["employee_id", "room_id", "start_time", "end_time",
-                    "attendee_count", "meeting_title"]
-        missing = [f for f in required if f not in payload]
-        if missing:
-            return {
-                "status": "FAILED",
-                "error": f"Missing required fields: {', '.join(missing)}",
-            }
+---
 
-        if action not in ("sequential", "parallel", "confirm"):
-            return {
-                "status": "FAILED",
-                "error": f"Unknown action '{action}'. Use: sequential | parallel | confirm",
-            }
+## 3. Insufficient Access Permissions
 
-        # ── Build BookingRequest ─────────────────────────────────────────────
-        booking = BookingRequest(
-            employee_id=str(payload["employee_id"]),
-            room_id=str(payload["room_id"]),
-            start_time=str(payload["start_time"]),
-            end_time=str(payload["end_time"]),
-            attendee_count=int(payload["attendee_count"]),
-            meeting_title=str(payload["meeting_title"]),
-        )
+E004 (BASIC access) attempts to book R003 (requires PREMIUM).
 
-        orchestrator = BookingOrchestrator()
+**Request:**
+```json
+{
+  "employee_id": "E004",
+  "room_id": "R003",
+  "start_time": "2026-07-03T14:00:00",
+  "end_time": "2026-07-03T15:00:00",
+  "attendee_count": 4,
+  "meeting_title": "Access Test"
+}
+```
 
-        # ── Route action ─────────────────────────────────────────────────────
-        if action == "sequential":
-            logger.info(
-                "SEQUENTIAL workflow — employee=%s room=%s",
-                booking.employee_id, booking.room_id,
-            )
-            result = await orchestrator.execute_sequential(booking)
+**Response:**
+```json
+{
+  "status": "FAILED",
+  "error": "Access level BASIC insufficient for room R003",
+  "step_failed": "verify_access"
+}
+```
 
-        elif action == "parallel":
-            logger.info(
-                "PARALLEL workflow — employee=%s room=%s",
-                booking.employee_id, booking.room_id,
-            )
-            # Run both I/O-bound checks in a thread pool, then merge
-            loop = asyncio.get_event_loop()
-            access_result, availability_result = await loop.run_in_executor(
-                None, _run_parallel_checks, booking
-            )
+---
 
-            # Merge results back into the orchestrator's parallel flow
-            executor = ToolExecutor()
+## 4. Room Unavailable
 
-            if not access_result.get("success") or not access_result.get("access_granted"):
-                result = {
-                    "workflow": "parallel",
-                    "status": "FAILED",
-                    "step": "access_verification",
-                    "error": access_result.get("error", "Access denied"),
-                }
-            elif not availability_result.get("success") or not availability_result.get("available"):
-                result = {
-                    "workflow": "parallel",
-                    "status": "FAILED",
-                    "step": "availability_check",
-                    "error": availability_result.get("error", "Room not available"),
-                    "conflicts": availability_result.get("conflicts", []),
-                }
-            else:
-                duration_result = executor.calculate_meeting_duration(
-                    booking.start_time, booking.end_time,
-                    access_result["access_level"],
-                )
-                if not duration_result.get("success") or not duration_result.get("within_limit"):
-                    result = {
-                        "workflow": "parallel",
-                        "status": "FAILED",
-                        "step": "duration_validation",
-                        "error": duration_result.get("error", "Duration limit exceeded"),
-                    }
-                else:
-                    attendee_result = executor.validate_attendee_count(
-                        booking.room_id, booking.attendee_count
-                    )
-                    if not attendee_result.get("success") or not attendee_result.get("capacity_sufficient"):
-                        result = {
-                            "workflow": "parallel",
-                            "status": "FAILED",
-                            "step": "capacity_validation",
-                            "error": attendee_result.get("error", "Insufficient capacity"),
-                        }
-                    else:
-                        room_details = executor.get_room_details(booking.room_id)
-                        result = {
-                            "workflow": "parallel",
-                            "status": "PENDING_CONFIRMATION",
-                            "parallel_execution_note": (
-                                "Access check and availability check ran concurrently "
-                                "via ThreadPoolExecutor; results merged before duration "
-                                "and capacity validation."
-                            ),
-                            "booking_request": booking.__dict__,
-                            "confirmation_summary": {
-                                "room_name": room_details.get("room_name"),
-                                "capacity": room_details.get("capacity"),
-                                "features": room_details.get("features"),
-                                "start_time": booking.start_time,
-                                "end_time": booking.end_time,
-                                "duration_hours": duration_result["duration_hours"],
-                                "duration_minutes": duration_result["duration_minutes"],
-                                "attendee_count": booking.attendee_count,
-                                "meeting_title": booking.meeting_title,
-                            },
-                            "access_result": access_result,
-                            "availability_result": availability_result,
-                            "duration_result": duration_result,
-                            "attendee_result": attendee_result,
-                        }
+A second employee attempts to book a room/time slot that's already confirmed.
 
-        elif action == "confirm":
-            confirmed = payload.get("confirmed")
-            if not isinstance(confirmed, bool):
-                return {
-                    "status": "FAILED",
-                    "error": "'confirmed' must be a boolean (true/false)",
-                }
-            logger.info(
-                "CONFIRM workflow — employee=%s confirmed=%s",
-                booking.employee_id, confirmed,
-            )
-            result = orchestrator.confirm_booking(booking, confirmed)
+**Request:**
+```json
+{
+  "employee_id": "E002",
+  "room_id": "R001",
+  "start_time": "2026-07-02T15:00:00",
+  "end_time": "2026-07-02T16:00:00",
+  "attendee_count": 3,
+  "meeting_title": "Conflict Test"
+}
+```
 
-        result = _make_json_safe(result)
-        logger.info("Invocation complete — status=%s", result.get("status"))
-        return result
+**Response:**
+```json
+{
+  "status": "FAILED",
+  "error": "1 booking conflict(s) found",
+  "conflicts": [
+    {
+      "booking_id": "7699262b-325e-414f-8c78-6cc3008388f7",
+      "existing_start": "2026-07-02T15:00:00",
+      "existing_end": "2026-07-02T16:00:00"
+    }
+  ],
+  "step_failed": "check_availability"
+}
+```
 
-    except KeyError as exc:
-        logger.error("Missing field: %s", exc)
-        return {"status": "FAILED", "error": f"Missing required field: {exc}"}
-    except ValueError as exc:
-        logger.error("Value error: %s", exc)
-        return {"status": "FAILED", "error": str(exc)}
-    except Exception as exc:
-        logger.exception("Unexpected runtime error")
-        return {"status": "FAILED", "error": str(exc)}
+---
 
+## 5. Booking Duration Exceeding Limit
 
-if __name__ == "__main__":
-    import os
+E004 (BASIC, 2-hour max) attempts a 3-hour booking.
 
-    # CRITICAL: when AgentCore Runtime starts the container, it runs
-    # `python main.py` and expects this process to start an HTTP server
-    # bound to 0.0.0.0:8080 (via app.run()) so its health check and
-    # /invocations endpoint become reachable. Previously this block only
-    # ran a one-off local test and exited immediately — no server ever
-    # started, so AgentCore's health check waited the full 30s for a port
-    # that would never open, and the deployment timed out.
-    #
-    # Set RUN_LOCAL_TEST=1 to instead run a single offline smoke test
-    # (useful for quick local sanity checks); otherwise this starts the
-    # real server, exactly as AgentCore Runtime requires.
-    if os.environ.get("RUN_LOCAL_TEST") == "1":
-        sample_sequential = {
-            "action": "sequential",
-            "employee_id": "E001",
-            "room_id": "R001",
-            "start_time": "2026-07-10T10:00:00",
-            "end_time": "2026-07-10T12:00:00",
-            "attendee_count": 5,
-            "meeting_title": "Team Sync",
-        }
-        print("=== LOCAL TEST — Sequential workflow ===")
-        result = asyncio.run(invoke(sample_sequential))
-        import json
-        print(json.dumps(result, indent=2, default=str))
-    else:
-        logger.info("Starting Bedrock AgentCore Runtime server on port 8080...")
-        app.run()
+**Request:**
+```json
+{
+  "employee_id": "E004",
+  "room_id": "R001",
+  "start_time": "2026-07-03T09:00:00",
+  "end_time": "2026-07-03T12:00:00",
+  "attendee_count": 4,
+  "meeting_title": "Long Meeting Test"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "FAILED",
+  "error": "Duration 3.0h exceeds limit of 2h for BASIC",
+  "step_failed": "calculate_duration"
+}
+```
+
+---
+
+## 6. Human Rejection (User says NO)
+
+Same flow as the Happy Path, but the employee declines at the confirmation step. No database
+record should be created.
+
+**Request:**
+```json
+{
+  "action": "confirm",
+  "employee_id": "E002",
+  "room_id": "R002",
+  "start_time": "2026-07-03T10:00:00",
+  "end_time": "2026-07-03T11:00:00",
+  "attendee_count": 4,
+  "meeting_title": "Cancelled Test",
+  "confirmed": false
+}
+```
+
+**Response:**
+```json
+{
+  "status": "CANCELLED",
+  "message": "Booking cancelled by user",
+  "database_record_created": false
+}
+```
+
+Verified via `aws dynamodb get-item` on `(RoomID: R002, StartTime: 2026-07-03T10:00:00)` —
+no item exists.
+
+---
+
+## Bonus: Back-to-Back Booking (15-Minute Buffer)
+
+Not one of the six required scenarios explicitly, but demonstrates the buffer logic inside
+Availability Check / Computation: a request starting only 10 minutes after an existing booking
+ends (no direct time overlap) is still correctly rejected, because it falls inside the 15-minute
+buffer.
+
+**Request** (existing booking on R001 ends at 16:00; this one starts at 16:10):
+```json
+{
+  "employee_id": "E003",
+  "room_id": "R001",
+  "start_time": "2026-07-02T16:10:00",
+  "end_time": "2026-07-02T17:00:00",
+  "attendee_count": 4,
+  "meeting_title": "Buffer Test"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "FAILED",
+  "error": "1 booking conflict(s) found",
+  "conflicts": [
+    {
+      "booking_id": "7699262b-325e-414f-8c78-6cc3008388f7",
+      "existing_start": "2026-07-02T15:00:00",
+      "existing_end": "2026-07-02T16:00:00"
+    }
+  ],
+  "step_failed": "check_availability"
+}
+```

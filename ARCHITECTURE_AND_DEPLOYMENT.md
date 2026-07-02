@@ -1,381 +1,176 @@
-"""
-Bedrock Agent Tools Configuration
-Defines all available tools for the booking agent
-"""
+# Architecture & Deployment — Conference Room Booking Agent
 
-TOOL_DEFINITIONS = [
-    {
-        "toolName": "verify_employee_access",
-        "description": "Verifies if an employee has access to book a specific conference room based on their access level and room requirements",
-        "inputSchema": {
-            "json": {
-                "type": "object",
-                "properties": {
-                    "employee_id": {
-                        "type": "string",
-                        "description": "The employee ID (e.g., E001)"
-                    },
-                    "room_id": {
-                        "type": "string",
-                        "description": "The conference room ID (e.g., R001)"
-                    }
-                },
-                "required": ["employee_id", "room_id"]
-            }
-        }
-    },
-    {
-        "toolName": "check_room_availability",
-        "description": "Checks if a conference room is available for a requested time slot, considering existing bookings and 15-minute buffer time",
-        "inputSchema": {
-            "json": {
-                "type": "object",
-                "properties": {
-                    "room_id": {
-                        "type": "string",
-                        "description": "The conference room ID (e.g., R001)"
-                    },
-                    "start_time": {
-                        "type": "string",
-                        "description": "Meeting start time in ISO 8601 format (e.g., 2026-01-16T09:00:00)"
-                    },
-                    "end_time": {
-                        "type": "string",
-                        "description": "Meeting end time in ISO 8601 format (e.g., 2026-01-16T11:00:00)"
-                    }
-                },
-                "required": ["room_id", "start_time", "end_time"]
-            }
-        }
-    },
-    {
-        "toolName": "calculate_meeting_duration",
-        "description": "Calculates the duration of a meeting and validates it against the employee's access level time limits",
-        "inputSchema": {
-            "json": {
-                "type": "object",
-                "properties": {
-                    "start_time": {
-                        "type": "string",
-                        "description": "Meeting start time in ISO 8601 format"
-                    },
-                    "end_time": {
-                        "type": "string",
-                        "description": "Meeting end time in ISO 8601 format"
-                    },
-                    "access_level": {
-                        "type": "string",
-                        "enum": ["BASIC", "STANDARD", "PREMIUM", "EXECUTIVE"],
-                        "description": "Employee's access level for time limit checking"
-                    }
-                },
-                "required": ["start_time", "end_time", "access_level"]
-            }
-        }
-    },
-    {
-        "toolName": "get_room_details",
-        "description": "Retrieves comprehensive details about a conference room including capacity, location, features, and amenities",
-        "inputSchema": {
-            "json": {
-                "type": "object",
-                "properties": {
-                    "room_id": {
-                        "type": "string",
-                        "description": "The conference room ID (e.g., R001)"
-                    }
-                },
-                "required": ["room_id"]
-            }
-        }
-    },
-    {
-        "toolName": "validate_attendee_count",
-        "description": "Validates that the number of attendees does not exceed the room's capacity",
-        "inputSchema": {
-            "json": {
-                "type": "object",
-                "properties": {
-                    "room_id": {
-                        "type": "string",
-                        "description": "The conference room ID (e.g., R001)"
-                    },
-                    "attendee_count": {
-                        "type": "integer",
-                        "description": "Number of people attending the meeting"
-                    }
-                },
-                "required": ["room_id", "attendee_count"]
-            }
-        }
-    },
-    {
-        "toolName": "create_booking",
-        "description": "Creates a new conference room booking in the database with all required details",
-        "inputSchema": {
-            "json": {
-                "type": "object",
-                "properties": {
-                    "employee_id": {
-                        "type": "string",
-                        "description": "Employee ID making the booking"
-                    },
-                    "room_id": {
-                        "type": "string",
-                        "description": "Conference room ID"
-                    },
-                    "start_time": {
-                        "type": "string",
-                        "description": "Meeting start time in ISO 8601 format"
-                    },
-                    "end_time": {
-                        "type": "string",
-                        "description": "Meeting end time in ISO 8601 format"
-                    },
-                    "attendee_count": {
-                        "type": "integer",
-                        "description": "Number of attendees"
-                    },
-                    "meeting_title": {
-                        "type": "string",
-                        "description": "Title or purpose of the meeting"
-                    }
-                },
-                "required": ["employee_id", "room_id", "start_time", "end_time", "attendee_count", "meeting_title"]
-            }
-        }
-    }
-]
+## Overview
 
+A multi-agent conference room booking system built with the AWS Strands Agents SDK, deployed
+to Amazon Bedrock AgentCore Runtime as an ARM64 container, with Amazon DynamoDB as the
+persistence layer.
 
-AGENT_CONFIG = {
-    "agentName": "ConferenceRoomBookingAgent",
-    "description": "Intelligent conference room booking assistant with multi-step verification",
-    "agentAliasId": "AIDACKVF75FCK",
-    "agentVersion": "DRAFT",
-    "tools": TOOL_DEFINITIONS,
-    "instructions": """You are an intelligent Conference Room Booking Assistant. 
+## System Components
 
-Your primary responsibility is to help employees book conference rooms efficiently and ensure all requirements are met.
+```
+┌─────────────────────┐
+│  agentcore invoke    │  (CLI / any HTTPS client with IAM auth)
+└──────────┬───────────┘
+           │ JSON payload
+           ▼
+┌─────────────────────────────────────────────┐
+│  Bedrock AgentCore Runtime (ARM64 container) │
+│  ┌─────────────────────────────────────────┐ │
+│  │  main.py                                 │ │
+│  │  @app.entrypoint  async def invoke()     │ │
+│  │  routes on payload["action"]:            │ │
+│  │    sequential | parallel | confirm       │ │
+│  └───────────────┬───────────────────────────┘ │
+│                  ▼                              │
+│  ┌─────────────────────────────────────────┐  │
+│  │  booking_agent.py                        │  │
+│  │  ToolExecutor        — individual tools  │  │
+│  │  BookingOrchestrator — workflow control  │  │
+│  └───────────────┬───────────────────────────┘  │
+└──────────────────┼──────────────────────────────┘
+                    ▼
+┌─────────────────────────────────────────────┐
+│  Amazon DynamoDB (ap-south-1)                │
+│  Employees | ConferenceRooms | Bookings      │
+│  RoomFeatures | AccessLevels                 │
+└─────────────────────────────────────────────┘
+```
 
-## Booking Workflow
+## Data Model
 
-When processing a booking request, follow this systematic approach:
+### `AccessLevel` (enum, `booking_agent.py`)
+```
+BASIC = 0, STANDARD = 1, PREMIUM = 2, EXECUTIVE = 3
+```
+Ordered hierarchy — a room requiring `STANDARD` accepts `STANDARD`, `PREMIUM`, or `EXECUTIVE`
+employees.
 
-1. **Verify Employee Access**: Always start by verifying that the employee has the necessary access level to book the requested room
-2. **Check Availability**: Ensure the room is available for the requested time slot (accounting for 15-minute buffers)
-3. **Calculate Duration**: Verify the meeting duration doesn't exceed limits for the employee's access level
-4. **Validate Capacity**: Confirm the room can accommodate all attendees
-5. **Get Room Details**: Retrieve complete room information to present to the user
-6. **Present Summary**: Show the booking details to the user for confirmation
+### `BookingStatus` (enum)
+```
+PENDING_CONFIRMATION | CONFIRMED | CANCELLED | FAILED
+```
 
-## Access Level Hierarchy
+### `BookingRequest` (dataclass)
+```python
+employee_id: str
+room_id: str
+start_time: str   # ISO 8601
+end_time: str     # ISO 8601
+attendee_count: int
+meeting_title: str
+```
 
-- **BASIC** (Level 0): Max 2-hour bookings, access to basic rooms only
-- **STANDARD** (Level 1): Max 4-hour bookings, access to standard and basic rooms
-- **PREMIUM** (Level 2): Max 8-hour bookings, access to premium and below
-- **EXECUTIVE** (Level 3): Max 24-hour bookings, access to all rooms
+### DynamoDB tables
 
-## Important Rules
+| Table | Partition Key | Sort Key | Notes |
+|---|---|---|---|
+| `Employees` | `EmployeeID` | — | Name, Department, Email, AccessLevel |
+| `ConferenceRooms` | `RoomID` | — | Capacity, Location, RequiredAccessLevel |
+| `RoomFeatures` | `RoomID` | `Feature` (or similar) | Projector, Video Conferencing, etc. |
+| `Bookings` | `RoomID` | `StartTime` | See note below on key design |
+| `AccessLevels` | `AccessLevel` | — | Max booking hours per level |
 
-- Always enforce the 15-minute buffer between consecutive bookings
-- Reject bookings that exceed the employee's time allocation
-- Verify room capacity before confirming
-- Never skip access verification steps
-- Provide clear, actionable error messages when bookings cannot be processed
+**Key design note:** `Bookings` uses `(RoomID, StartTime)` as its composite key. This means a
+second confirmed booking for the *same room and exact same start time* overwrites the prior
+record rather than creating a duplicate — which is what makes the "no duplicate booking on
+re-run" requirement hold for bookings created through the agent (which always use real,
+caller-supplied timestamps). It does **not** protect against `initialize_dynamodb.py`'s sample
+data, which computes its three seed bookings' start times relative to `datetime.utcnow()` at run
+time — re-running the seed script produces new keys each time rather than reusing the same three
+sample slots. Fixing this would mean hardcoding fixed ISO timestamps in the seed script rather
+than deriving them from the current time.
 
-## Response Format
+## Execution Patterns
 
-Always provide structured responses with:
-- Clear status (success/failure)
-- Specific error reasons when applicable
-- Room details in confirmation summaries
-- Booking confirmation with booking ID when successful
+### Sequential (`action: "sequential"`, or omitted — this is the default)
 
-## Error Handling
+`BookingOrchestrator.execute_sequential()`, each step gated on the previous succeeding:
 
-When errors occur:
-1. Identify which step failed
-2. Provide the specific reason
-3. Suggest corrective actions
-4. Maintain professional tone in all communications
-"""
-}
+1. `verify_employee_access(employee_id, room_id)` — employee lookup + access-level comparison
+   against the room's required level
+2. `check_room_availability(room_id, start_time, end_time)` — scans existing bookings for the
+   room, applying a 15-minute buffer on either side of the requested slot
+3. `calculate_meeting_duration(start_time, end_time, access_level)` — computes duration in
+   hours/minutes, compares against the employee's access-level max
+4. `validate_attendee_count(room_id, attendee_count)` — compares against room capacity
+5. `get_room_details(room_id)` — fetches full room info (name, capacity, features, location) for
+   the confirmation summary
+6. Returns `status: PENDING_CONFIRMATION` with the full booking summary; no DynamoDB write yet
 
+### Parallel (`action: "parallel"`)
 
-EXECUTION_PATTERNS = {
-    "sequential": {
-        "description": "Sequential execution - validates all conditions before confirmation",
-        "steps": [
-            "verify_employee_access",
-            "check_room_availability",
-            "calculate_meeting_duration",
-            "validate_attendee_count",
-            "get_room_details",
-            "present_confirmation_summary"
-        ],
-        "use_when": "Standard booking flow, maximum safety"
-    },
-    "parallel": {
-        "description": "Parallel execution - optimizes speed by running non-dependent checks simultaneously",
-        "concurrent_phase": ["verify_employee_access", "check_room_availability"],
-        "sequential_phase": [
-            "calculate_meeting_duration",
-            "validate_attendee_count",
-            "get_room_details",
-            "present_confirmation_summary"
-        ],
-        "use_when": "Time is critical, parallel checks can run independently"
-    }
-}
+`_run_parallel_checks()` in `main.py` submits `verify_employee_access` and
+`check_room_availability` to a `concurrent.futures.ThreadPoolExecutor` (2 workers), since both
+are independent, I/O-bound DynamoDB calls with no dependency on each other. Once both complete,
+results are merged; duration and capacity validation then run sequentially against the merged
+result, same as the sequential path. The response includes a `parallel_execution_note` field and
+the full intermediate results (`access_result`, `availability_result`, `duration_result`,
+`attendee_result`) so the concurrent execution is directly inspectable in the output.
 
+### Confirm (`action: "confirm"`)
 
-DATABASE_SCHEMA = {
-    "Employees": {
-        "PrimaryKey": "EmployeeID",
-        "Attributes": {
-            "EmployeeID": "String (E001, E002, ...)",
-            "Name": "String",
-            "Email": "String",
-            "Department": "String",
-            "AccessLevel": "String (BASIC|STANDARD|PREMIUM|EXECUTIVE)",
-            "CreatedAt": "ISO 8601 String"
-        }
-    },
-    "ConferenceRooms": {
-        "PrimaryKey": "RoomID",
-        "Attributes": {
-            "RoomID": "String (R001, R002, ...)",
-            "RoomName": "String",
-            "Capacity": "Number",
-            "Location": "String",
-            "Floor": "String",
-            "RequiredAccessLevel": "String",
-            "Amenities": "String",
-            "CreatedAt": "ISO 8601 String"
-        }
-    },
-    "Bookings": {
-        "PrimaryKey": ["RoomID", "StartTime"],
-        "Attributes": {
-            "RoomID": "String (Partition Key)",
-            "StartTime": "ISO 8601 String (Sort Key)",
-            "BookingID": "UUID String",
-            "EmployeeID": "String",
-            "EndTime": "ISO 8601 String",
-            "AttendeeCount": "Number",
-            "MeetingTitle": "String",
-            "BookingStatus": "String (CONFIRMED|CANCELLED|PENDING)",
-            "CreatedAt": "ISO 8601 String",
-            "UpdatedAt": "ISO 8601 String"
-        }
-    },
-    "RoomFeatures": {
-        "PrimaryKey": ["RoomID", "FeatureName"],
-        "Attributes": {
-            "RoomID": "String (Partition Key)",
-            "FeatureName": "String (Sort Key)",
-            "AddedAt": "ISO 8601 String"
-        }
-    },
-    "AccessLevels": {
-        "PrimaryKey": "AccessLevelID",
-        "Attributes": {
-            "AccessLevelID": "String (BASIC|STANDARD|PREMIUM|EXECUTIVE)",
-            "Name": "String",
-            "Description": "String",
-            "MaxBookingHours": "Number",
-            "Priority": "Number"
-        }
-    }
-}
+Requires the full booking fields plus a boolean `confirmed` field. Routes to
+`BookingOrchestrator.confirm_booking(booking, confirmed)`:
+- `confirmed: true` → writes a `CONFIRMED` record to `Bookings` (via `PutItem` on the
+  `RoomID`/`StartTime` key) and returns the generated `booking_id`
+- `confirmed: false` → returns `status: CANCELLED`, `database_record_created: false`, no write
 
+Note: the `confirm` action re-derives the booking from the payload fields but does not currently
+re-run the availability check before writing — it trusts that the caller confirmed shortly after
+receiving a `PENDING_CONFIRMATION` response from `sequential`/`parallel`. A production hardening
+would re-verify availability immediately before the write to guard against a race between two
+users confirming the same slot concurrently.
 
-PROMPT_TEMPLATES = {
-    "sequential": """
-Process the booking request using SEQUENTIAL execution:
+## Deployment
 
-1. First, verify the employee '{employee_id}' has access to room '{room_id}'
-2. Then, check if room '{room_id}' is available from {start_time} to {end_time}
-3. Calculate the meeting duration and validate it against the access level limits
-4. Validate that {attendee_count} attendees don't exceed room capacity
-5. Get complete details for room '{room_id}'
-6. Present a summary to the user for confirmation
+### Why AgentCore Runtime requires a container build, not a local zip
 
-Only proceed to the next step if the current step succeeds.
-""",
-    "parallel": """
-Process the booking request using PARALLEL execution:
+Bedrock AgentCore Runtime requires **linux/arm64** containers. Any dependency with native
+compiled code (e.g. `pydantic-core`, `awscrt`, `cffi`) must be built for that exact platform.
+Manually `pip install`-ing on a Windows/x86_64 machine and zipping the result produces Windows
+`.pyd` binaries that fail to import at runtime (`ModuleNotFoundError:
+No module named 'pydantic_core._pydantic_core'`) — this is what the project hit early in
+development, and is why deployment goes through `agentcore launch`, which builds via AWS
+CodeBuild targeting the correct architecture, rather than any manual packaging step.
 
-1. Simultaneously verify employee access AND check room availability
-2. Then proceed with duration calculation, capacity validation, and room details
-3. Present a summary to the user for confirmation
+### Deployment flow
 
-This approach optimizes speed by running independent checks concurrently.
-""",
-    "happy_path": """
-Employee E002 (Bob Smith, PREMIUM access) wants to book room R001 (Innovation Hub) from 09:00 to 11:00 for 8 people for a team meeting.
+```
+agentcore configure --entrypoint main.py --name conference_booking_agent
+  → generates .bedrock_agentcore.yaml + Dockerfile
 
-Expected flow:
-- ✓ Access verified (PREMIUM >= BASIC)
-- ✓ Room available (no conflicts)
-- ✓ Duration OK (2 hours <= 8 hour limit)
-- ✓ Capacity OK (8 <= 20)
-- ✓ Room details retrieved
-- ✓ Summary presented for confirmation
-- ✓ Booking confirmed in database
-""",
-    "access_denied": """
-Employee E004 (David Wilson, BASIC access) wants to book room R003 (Executive Suite, requires PREMIUM).
+agentcore launch
+  → zips source, uploads to S3
+  → CodeBuild project builds an ARM64 image from the Dockerfile (pip install runs
+    inside the Linux ARM64 build environment — no cross-compilation flags needed)
+  → pushes image to ECR
+  → creates/updates the AgentCore Runtime + endpoint
+```
 
-Expected flow:
-- ✗ Access denied (BASIC < PREMIUM required)
-- Return error with specific access level mismatch message
-""",
-    "unavailable": """
-Employee E001 (Alice Johnson) wants to book room R001 from 02:30 to 03:30, but a confirmed booking exists from 02:00 to 03:00.
+Subsequent deployments after a code change use:
+```
+agentcore launch --auto-update-on-conflict
+```
 
-Expected flow:
-- ✓ Access verified
-- ✗ Availability check fails (conflict within 15-minute buffer)
-- Return error with conflict details and alternative times
-""",
-    "duration_exceeded": """
-Employee E003 (Carol Davis, STANDARD access) wants to book a room for 6 hours, but STANDARD is limited to 4 hours max.
+### IAM
 
-Expected flow:
-- ✓ Access verified
-- ✓ Room available
-- ✗ Duration exceeds limit (6 > 4)
-- Return error with duration limit information
-""",
-    "capacity_exceeded": """
-Employee E002 wants to book room R005 (Client Meeting Room, capacity 8) for 12 people.
+`agentcore configure` auto-creates an execution role
+(`AmazonBedrockAgentCoreSDKRuntime-<region>-<hash>`) with baseline Bedrock/CloudWatch/X-Ray
+permissions. DynamoDB access is **not** included by default and must be attached separately —
+see `dynamodb-policy.json` and the README's deployment section.
 
-Expected flow:
-- ✓ Access verified
-- ✓ Room available
-- ✓ Duration OK
-- ✗ Capacity check fails (12 > 8)
-- Return error with capacity information
-""",
-    "human_confirmation": """
-After all validations pass, present the booking summary to the user:
+### Server startup
 
-Room: Innovation Hub
-Capacity: 20 people
-Features: [list features]
-Location: Building A, Floor 2
-Start: 2026-01-16 09:00:00
-End: 2026-01-16 11:00:00
-Duration: 2 hours 0 minutes
-Attendees: 8 people
-Meeting: Team Meeting
+`main.py`'s `if __name__ == "__main__":` block calls `app.run()`, which starts the HTTP server
+AgentCore Runtime's health check and `/invocations` endpoint require (bound to `0.0.0.0:8080`
+inside the container). A `RUN_LOCAL_TEST=1` environment variable switches to a one-off local
+smoke test instead, for quick offline sanity checks without needing a running server.
 
-Question: "Do you want to confirm this booking?"
-Options: [YES] or [NO]
+## Testing
 
-If YES: Create database record with status CONFIRMED
-If NO: Cancel without creating record, return cancelled status
-"""
-}
+- `test_scenarios.py` — local test runner exercising all execution patterns and edge cases
+  directly against `BookingOrchestrator`, without going through the deployed runtime
+- `prompts.md` — the six required scenarios (happy path, insufficient access, room unavailable,
+  duration exceeded, human rejection, back-to-back buffer conflict) with real payloads and
+  responses captured from the deployed agent via `agentcore invoke`

@@ -320,7 +320,11 @@ def seed_sample_bookings():
     print("Seeding Sample Bookings...")
     table = dynamodb.Table('Bookings')
     
-    base_date = datetime.utcnow()
+    # Fixed deterministic date (not datetime.utcnow()) so re-running this script
+    # always produces the exact same three sample bookings — same RoomID+StartTime
+    # composite key each run — which overwrites in place instead of creating new
+    # "duplicate-looking" rows with drifting timestamps every run.
+    base_date = datetime(2026, 1, 15, 9, 0, 0)
     
     bookings = [
         {
