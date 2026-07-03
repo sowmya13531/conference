@@ -1,28 +1,24 @@
 """
-Conference Room Booking Agent — Tool Definitions & Agent Configuration
+Conference Room Booking Agent — Tool Schema Reference & Prompt Templates
 
 Centralises two things used across the project:
 
 1. TOOL_DEFINITIONS
-   JSON-schema descriptions of every tool the agent exposes.  These are the
-   canonical contracts imported by the Lambda handler (lambda_handler.py) and
-   can be registered directly with Bedrock Agents or any Strands Agent that
-   wraps this service.  Each schema maps 1-to-1 with a method on ToolExecutor
-   in booking_agent.py.
+   JSON-schema descriptions of every tool the agent exposes. These mirror
+   the @tool-decorated functions in strands_tools.py 1-to-1 with the
+   ToolExecutor methods in booking_agent.py — kept here as a readable
+   reference / for the Lambda handler, not as the live tool schema (Strands
+   derives that directly from strands_tools.py's type hints at runtime).
 
-2. AGENT_CONFIG
-   Runtime configuration for the Bedrock AgentCore deployment: model ID,
-   system instructions, tool list, and generation parameters.  The
-   instructions encode the full booking workflow and the per-access-level
-   booking limits so the model always follows the correct business rules.
+2. PROMPT_TEMPLATES
+   Example natural-language prompts for each demonstration scenario. See
+   prompts.md for the full, current set used in the actual demo.
 
-Model choice — amazon.nova-micro-v1:0
-   Nova Micro is the lowest-latency, lowest-cost Bedrock model that supports
-   structured tool-calling.  It is well-suited to this task because every
-   decision is deterministic (access hierarchy lookups, time arithmetic,
-   capacity comparisons) and the model's role is primarily orchestration and
-   natural-language summarisation rather than open-ended reasoning.
+The live agent's model id, region, and system prompt are configured in
+strands_runtime.py (BEDROCK_MODEL_ID, BEDROCK_REGION, SYSTEM_PROMPT) — that
+is the file to edit to change agent behavior, not this one.
 """
+
 
 TOOL_DEFINITIONS = [
     {
@@ -169,55 +165,17 @@ TOOL_DEFINITIONS = [
 ]
 
 
-# Agent configuration for Bedrock AgentCore
-# "model" updated to Amazon Nova Micro — the lowest-cost Bedrock model
-# suitable for structured tool-calling/reasoning tasks like this one.
-# See the module docstring above: this dict is currently unused by the
-# live pipeline in main.py/booking_agent.py.
-AGENT_CONFIG = {
-    "agentName": "ConferenceRoomBookingAgent",
-    "description": "Multi-agent system for conference room booking with access control, availability checking, and human-in-the-loop confirmation",
-    "model": "amazon.nova-micro-v1:0",  # Amazon Nova Micro — low-cost Bedrock model
-    "tools": TOOL_DEFINITIONS,
-    "instructions": """You are an intelligent Conference Room Booking Assistant. Your role is to help employees book conference rooms efficiently.
-
-WORKFLOW:
-1. First, verify the employee has access permissions for the requested room
-2. Check if the room is available for the requested time slot
-3. Calculate the meeting duration and ensure it's within the employee's booking limits
-4. Validate that the room has sufficient capacity for the attendee count
-5. Get detailed room information for confirmation
-6. Present a booking summary to the employee for confirmation
-7. Only create the booking after receiving explicit confirmation
-
-IMPORTANT RULES:
-- Always verify access permissions FIRST before any other checks
-- Always check room availability including the 15-minute buffer
-- Always validate meeting duration against access level limits
-- Always ensure room capacity is sufficient
-- Present a clear summary before asking for confirmation
-- Only save to database after human confirmation
-- If the user says NO, cancel without saving any record
-- Handle all edge cases gracefully with clear error messages
-
-BOOKING LIMITS BY ACCESS LEVEL:
-- BASIC: 2 hours max per booking
-- STANDARD: 4 hours max per booking
-- PREMIUM: 8 hours max per booking
-- EXECUTIVE: 24 hours max per booking
-
-When presenting the booking summary, include:
-- Room name and capacity
-- Room features available
-- Start time and end time
-- Calculated duration
-- Number of attendees
-- Meeting title
-
-Ask the employee to confirm with a YES/NO response.""",
-    "maxTokens": 4096,
-    "temperature": 0.5
-}
+# ─────────────────────────────────────────────────────────────────────────
+# REMOVED: AGENT_CONFIG dict (previously hardcoded "amazon.nova-micro-v1:0"
+# here). It was dead code — never imported or used by main.py or
+# booking_agent.py — but its presence caused real confusion during
+# development (its model/instructions got mistaken for the live config and
+# copy-pasted into the actual runtime, breaking the deployed agent).
+#
+# The system prompt, model id, and region that ACTUALLY drive the deployed
+# agent live in strands_runtime.py (SYSTEM_PROMPT, BEDROCK_MODEL_ID,
+# BEDROCK_REGION). Edit those, not this file, to change agent behavior.
+# ─────────────────────────────────────────────────────────────────────────
 
 
 # Prompt templates for common scenarios

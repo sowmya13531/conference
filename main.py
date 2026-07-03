@@ -13,7 +13,15 @@ from decimal import Decimal
 from typing import Dict, Any
 
 from bedrock_agentcore import BedrockAgentCoreApp
+try:
+    from bedrock_agentcore.runtime import RequestContext
+except ImportError:
+    try:
+        from bedrock_agentcore.runtime.context import RequestContext
+    except ImportError:
+        from bedrock_agentcore import RequestContext
 from booking_agent import BookingOrchestrator, BookingRequest, ToolExecutor
+from strands_runtime import run_natural_language_turn
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,11 +74,22 @@ def _run_parallel_checks(booking: BookingRequest):
 
 
 @app.entrypoint
-async def invoke(payload: Dict[str, Any]) -> Dict[str, Any]:
+async def invoke(payload: Dict[str, Any], context: RequestContext) -> Dict[str, Any]:
     """
     AgentCore Runtime Entry Point
 
-    Accepted payload keys:
+    PRIMARY (natural language, LLM-driven):
+      prompt      : str  e.g. "I want to book room R001 tomorrow 10-12 for 5 people"
+
+      Session continuity (needed so a later "yes"/"no" confirmation lands
+      in the same conversation as the booking request before it) comes
+      from the runtime's own session id, NOT a payload field — pass it via:
+        agentcore invoke '{"prompt": "..."}' --session-id "<33+ char id>"
+      or the boto3 `runtimeSessionId` parameter. context.session_id below
+      is populated by AgentCore Runtime automatically from that.
+
+    LEGACY (structured, deterministic — bypasses the LLM entirely, kept for
+    scripted tests of the underlying tool logic):
       action         : "sequential" | "parallel" | "confirm" | "cancel"
       employee_id    : str  e.g. "E001"
       room_id        : str  e.g. "R001"
@@ -88,6 +107,33 @@ async def invoke(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     logger.info("AgentCore invocation received ??? action=%s", payload.get("action"))
 
+    # ── Natural-language path ────────────────────────────────────────────
+    # This is the primary interface the assessment asks for: a real
+    # strands.Agent backed by a Bedrock Claude model decides which tools
+    # to call, in what order (including calling two tools in one turn for
+    # the parallel pattern), and drives the human-in-the-loop confirmation
+    # across turns of the same session. See strands_runtime.py.
+    #
+    # session_id comes from `context.session_id`, which AgentCore Runtime
+    # sets automatically per invocation (from the X-Amzn-Bedrock-AgentCore-
+    # Runtime-Session-Id header / the CLI's --session-id flag / boto3's
+    # runtimeSessionId param). We use that rather than a client-supplied
+    # payload field so session continuity can't drift if the caller
+    # forgets to echo a custom field back — same session id in, same
+    # conversation state out, guaranteed by the runtime itself.
+    if "prompt" in payload:
+        prompt = str(payload["prompt"])
+        session_id = context.session_id or "default"
+        logger.info("NATURAL LANGUAGE turn — session=%s", session_id)
+        try:
+            reply = run_natural_language_turn(session_id, prompt)
+            return {"status": "OK", "session_id": session_id, "response": reply}
+        except Exception as exc:
+            logger.exception("Natural language turn failed")
+            return {"status": "FAILED", "session_id": session_id, "error": str(exc)}
+
+    # ── Legacy structured path (kept for scripted/automated testing of ──
+    # the deterministic tool logic independent of the LLM layer) ────────
     try:
         action = payload.get("action", "sequential").lower()
 
