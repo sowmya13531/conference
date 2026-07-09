@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Tachyon Technologies — Room Booking Agent</title>
+<style>
+  /* ─── Design tokens ─── */
+  :root {
+    --bg-base:     #0d0f14;
+    --bg-panel:    #13161e;
+    --bg-card:     #1a1e28;
+    --bg-input:    #1e2230;
+    --bg-hover:    #242838;
+    --accent:      #4f7fff;
+    --accent-dim:  #2a4499;
+    --accent-glow: rgba(79,127,255,.18);
+    --green:       #22c55e;
+    --green-dim:   rgba(34,197,94,.12);
+    --red:         #ef4444;
+    --red-dim:     rgba(239,68,68,.12);
+    --amber:       #f59e0b;
+    --amber-dim:   rgba(245,158,11,.12);
+    --text-1:      #e8eaf0;
+    --text-2:      #8c92a8;
+    --text-3:      #555c72;
+    --border:      #232737;
+    --border-hi:   #2e3450;
+    --radius:      10px;
+    --radius-lg:   16px;
+    --font-mono:   'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --font-ui:     'Inter', 'Segoe UI', system-ui, sans-serif;
+    --trans:       .15s ease;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-ui);
+    background: var(--bg-base);
+    color: var(--text-1);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* ─── Topbar ─── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 56px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -.3px;
+    color: var(--text-1);
+  }
+  .topbar-brand .logo {
+    width: 28px; height: 28px;
+    background: var(--accent);
+    border-radius: 7px;
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+  }
+  .topbar-meta {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-3);
+  }
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    display: inline-block;
+  }
+  .topbar-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    color: var(--text-3);
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: var(--trans);
+  }
+  .tab-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+  .tab-btn.active { background: var(--bg-hover); color: var(--accent); }
+
+  /* ─── Layout ─── */
+  .layout {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 280px 1fr 300px;
+    height: calc(100vh - 56px);
+    overflow: hidden;
+  }
+
+  /* ─── Sidebar ─── */
+  .sidebar {
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-section {
+    padding: 16px 16px 8px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-3);
+    font-weight: 600;
+  }
+  .sidebar-list {
+    list-style: none;
+    padding: 0 8px;
+    flex: 1;
+    overflow-y: auto;
+  }
+  .sidebar-list::-webkit-scrollbar { width: 4px; }
+  .sidebar-list::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
+
+  .sidebar-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 10px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: var(--trans);
+    margin-bottom: 2px;
+    border: 1px solid transparent;
+  }
+  .sidebar-item:hover { background: var(--bg-hover); border-color: var(--border-hi); }
+  .sidebar-item.active {
+    background: var(--accent-glow);
+    border-color: var(--accent-dim);
+  }
+  .sidebar-item .item-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+    width: 24px;
+    text-align: center;
+    line-height: 20px;
+  }
+  .sidebar-item .item-body {}
+  .sidebar-item .item-title { font-size: 13px; font-weight: 500; color: var(--text-1); }
+  .sidebar-item .item-desc { font-size: 11px; color: var(--text-3); margin-top: 1px; line-height: 1.4; }
+  .sidebar-item.active .item-title { color: var(--accent); }
+
+  .sidebar-divider { height: 1px; background: var(--border); margin: 8px 12px; }
+
+  .sidebar-bottom {
+    padding: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .employee-select-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-3);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  /* ─── Main content ─── */
+  .main {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-base);
+  }
+  .main-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-panel);
+  }
+  .main-header h2 { font-size: 16px; font-weight: 600; color: var(--text-1); }
+  .main-header p { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+
+  /* ─── Form ─── */
+  .form-area {
+    padding: 20px 24px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .form-area::-webkit-scrollbar { width: 4px; }
+  .form-area::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group.full { grid-column: span 2; }
+  .form-group label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: .8px;
+  }
+  .form-control {
+    background: var(--bg-input);
+    border: 1px solid var(--border-hi);
+    color: var(--text-1);
+    padding: 9px 12px;
+    border-radius: var(--radius);
+    font: 13px/1 var(--font-ui);
+    transition: var(--trans);
+    outline: none;
+    width: 100%;
+  }
+  .form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  .form-control::placeholder { color: var(--text-3); }
+  select.form-control { cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238c92a8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+  }
+  select.form-control option { background: var(--bg-card); }
+
+  /* ─── Execution mode ─── */
+  .exec-mode {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 18px 0 14px;
+  }
+  .mode-card {
+    padding: 12px 14px;
+    border-radius: var(--radius);
+    border: 1.5px solid var(--border-hi);
+    cursor: pointer;
+    transition: var(--trans);
+    background: var(--bg-card);
+    user-select: none;
+  }
+  .mode-card:hover { border-color: var(--border-hi); background: var(--bg-hover); }
+  .mode-card.selected { border-color: var(--accent); background: var(--accent-glow); }
+  .mode-card .mode-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-1);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+  .mode-card.selected .mode-title { color: var(--accent); }
+  .mode-card .mode-desc { font-size: 11px; color: var(--text-3); line-height: 1.4; }
+  .mode-radio { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--text-3);
+    flex-shrink: 0; transition: var(--trans); }
+  .mode-card.selected .mode-radio { border-color: var(--accent); background: var(--accent); }
+
+  .form-actions {
+    display: flex;
+    gap: 10px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-panel);
+  }
+  .btn {
+    padding: 9px 20px;
+    border-radius: var(--radius);
+    border: none;
+    font: 600 13px var(--font-ui);
+    cursor: pointer;
+    transition: var(--trans);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #6b93ff; }
+  .btn-primary:active { transform: scale(.98); }
+  .btn-primary:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border-hi);
+    color: var(--text-2);
+  }
+  .btn-ghost:hover { background: var(--bg-hover); color: var(--text-1); }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover { background: #f87171; }
+  .btn-success { background: var(--green); color: #000; }
+  .btn-success:hover { background: #4ade80; }
+
+  /* ─── Right panel (output) ─── */
+  .output-panel {
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .output-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .output-header .oh-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--text-3);
+  }
+  .output-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.7;
+    color: var(--text-2);
+  }
+  .output-body::-webkit-scrollbar { width: 4px; }
+  .output-body::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
+  .output-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 8px;
+    color: var(--text-3);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    text-align: center;
+  }
+  .output-empty .oe-icon { font-size: 32px; margin-bottom: 4px; opacity: .5; }
+
+  /* ─── Result blocks ─── */
+  .result-block {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    border: 1px solid var(--border-hi);
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .result-block .rb-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .rb-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    font-family: var(--font-ui);
+  }
+  .rb-badge.success { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,197,94,.3); }
+  .rb-badge.error   { background: var(--red-dim);   color: var(--red);   border: 1px solid rgba(239,68,68,.3); }
+  .rb-badge.pending { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(245,158,11,.3); }
+  .rb-badge.info    { background: var(--accent-glow); color: var(--accent); border: 1px solid var(--accent-dim); }
+
+  .rb-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 11.5px;
+  }
+  .rb-step:last-child { border-bottom: none; }
+  .rb-step .step-icon { font-size: 12px; flex-shrink: 0; width: 16px; margin-top: 1px; }
+  .rb-step .step-label { color: var(--text-3); min-width: 110px; }
+  .rb-step .step-value { color: var(--text-1); flex: 1; }
+  .rb-step .step-value.ok  { color: var(--green); }
+  .rb-step .step-value.err { color: var(--red); }
+  .rb-step .step-value.warn { color: var(--amber); }
+
+  /* Confirmation dialog */
+  .confirm-box {
+    background: var(--bg-card);
+    border: 1.5px solid var(--amber);
+    border-radius: var(--radius-lg);
+    padding: 18px;
+    margin-bottom: 12px;
+    box-shadow: 0 0 24px rgba(245,158,11,.08);
+  }
+  .confirm-box .cb-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--amber);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-ui);
+  }
+  .confirm-box table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+    margin-bottom: 14px;
+    font-family: var(--font-mono);
+  }
+  .confirm-box td {
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .confirm-box td:first-child { color: var(--text-3); width: 90px; }
+  .confirm-box td:last-child { color: var(--text-1); }
+  .confirm-box tr:last-child td { border-bottom: none; }
+  .confirm-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+  /* Agent chat panel overlay */
+  .chat-panel {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+  }
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .chat-messages::-webkit-scrollbar { width: 4px; }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
+  .chat-msg {
+    max-width: 100%;
+    font-family: var(--font-ui);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .chat-msg .msg-role {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    margin-bottom: 4px;
+  }
+  .chat-msg.agent .msg-role { color: var(--accent); }
+  .chat-msg.user .msg-role  { color: var(--text-3); }
+  .chat-msg .msg-body {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    border: 1px solid var(--border-hi);
+    white-space: pre-wrap;
+  }
+  .chat-msg.user .msg-body { background: var(--accent-dim); border-color: var(--accent); color: #c8d8ff; }
+
+  .chat-input-area {
+    padding: 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+  }
+  .chat-input {
+    flex: 1;
+    background: var(--bg-input);
+    border: 1px solid var(--border-hi);
+    color: var(--text-1);
+    padding: 9px 12px;
+    border-radius: var(--radius);
+    font: 13px var(--font-ui);
+    outline: none;
+    transition: var(--trans);
+    resize: none;
+    min-height: 38px;
+    max-height: 80px;
+  }
+  .chat-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  .chat-input::placeholder { color: var(--text-3); }
+
+  /* Steps progress */
+  .steps-list { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
+  .step-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-family: var(--font-ui);
+    font-size: 12px;
+    transition: var(--trans);
+  }
+  .step-row .sr-num {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--border);
+    color: var(--text-3);
+    font-size: 10px;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    transition: var(--trans);
+  }
+  .step-row.done .sr-num   { background: var(--green); color: #000; }
+  .step-row.active .sr-num { background: var(--accent); color: #fff; }
+  .step-row.fail .sr-num   { background: var(--red);   color: #fff; }
+  .step-row .sr-label { flex: 1; color: var(--text-2); }
+  .step-row.done .sr-label   { color: var(--text-1); }
+  .step-row.active .sr-label { color: var(--text-1); font-weight: 600; }
+  .step-row.fail .sr-label   { color: var(--red); }
+  .step-row .sr-status { font-size: 10px; color: var(--text-3); }
+  .step-row.done .sr-status   { color: var(--green); }
+  .step-row.fail .sr-status   { color: var(--red); }
+
+  /* JSON viewer */
+  .json-block {
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 11px;
+    overflow-x: auto;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .json-block::-webkit-scrollbar { width: 4px; height: 4px; }
+  .json-block::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
+  .json-key   { color: #8ab4f8; }
+  .json-str   { color: #a8d8a8; }
+  .json-num   { color: #f6c90e; }
+  .json-bool  { color: #f8a04b; }
+  .json-null  { color: var(--text-3); }
+
+  /* Loader */
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border-hi);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-3);
+    font-size: 12px;
+    font-family: var(--font-ui);
+    padding: 6px 0;
+  }
+
+  /* Notification badge */
+  .notif {
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    border: 1px solid;
+    font-family: var(--font-ui);
+    font-size: 12px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .notif.success { background: var(--green-dim); border-color: rgba(34,197,94,.3); color: var(--green); }
+  .notif.error   { background: var(--red-dim);   border-color: rgba(239,68,68,.3);  color: #fca5a5; }
+  .notif.info    { background: var(--accent-glow); border-color: var(--accent-dim); color: #a5c0ff; }
+  .notif .notif-icon { font-size: 14px; flex-shrink: 0; }
+  .notif .notif-body { flex: 1; }
+  .notif .notif-title { font-weight: 700; margin-bottom: 2px; }
+
+  /* Tool call trace */
+  .tool-trace {
+    background: var(--bg-base);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    margin: 6px 0;
+    font-size: 10.5px;
+    font-family: var(--font-mono);
+  }
+  .tool-trace .tt-name { color: var(--accent); margin-bottom: 3px; font-weight: 600; }
+  .tool-trace .tt-args { color: var(--text-3); }
+  .tool-trace .tt-result { color: var(--text-2); margin-top: 4px; border-top: 1px solid var(--border); padding-top: 4px; }
+
+  /* Parallel indicator */
+  .parallel-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: rgba(79,127,255,.1);
+    border: 1px solid rgba(79,127,255,.25);
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--accent);
+    font-family: var(--font-ui);
+    letter-spacing: .3px;
+  }
+  .parallel-icon {
+    display: inline-block;
+    width: 16px; height: 10px;
+    position: relative;
+  }
+  .parallel-icon::before, .parallel-icon::after {
+    content: '';
+    position: absolute;
+    width: 6px; height: 2px;
+    background: currentColor;
+    border-radius: 1px;
+  }
+  .parallel-icon::before { top: 2px; left: 0; }
+  .parallel-icon::after  { top: 6px; left: 0; }
+
+  /* Scenario chips */
+  .scenarios {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 12px 0;
+  }
+  .scenario-chip {
+    padding: 5px 11px;
+    border-radius: 20px;
+    border: 1px solid var(--border-hi);
+    background: var(--bg-card);
+    color: var(--text-2);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--trans);
+  }
+  .scenario-chip:hover { border-color: var(--accent-dim); color: var(--accent); background: var(--accent-glow); }
+
+  /* Section label */
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-3);
+    margin: 18px 0 8px;
+  }
+  .section-label:first-child { margin-top: 0; }
+
+  /* Access level chips */
+  .access-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+  .ac-BASIC     { background: rgba(148,163,184,.12); color: #94a3b8; border: 1px solid rgba(148,163,184,.25); }
+  .ac-STANDARD  { background: rgba(251,191,36,.1);  color: #fbbf24; border: 1px solid rgba(251,191,36,.25); }
+  .ac-PREMIUM   { background: rgba(139,92,246,.1);  color: #a78bfa; border: 1px solid rgba(139,92,246,.25); }
+  .ac-EXECUTIVE { background: rgba(34,197,94,.1);   color: #4ade80; border: 1px solid rgba(34,197,94,.25); }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--bg-card);
+    border: 1px solid var(--border-hi);
+    border-radius: var(--radius);
+    padding: 10px 18px;
+    font-size: 13px;
+    color: var(--text-1);
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
+    transition: transform .25s ease;
+    z-index: 999;
+    white-space: nowrap;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Utilities */
+  .text-accent { color: var(--accent); }
+  .text-green  { color: var(--green); }
+  .text-red    { color: var(--red); }
+  .text-amber  { color: var(--amber); }
+  .text-muted  { color: var(--text-3); }
+  .mt-8  { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .gap-8 { gap: 8px; }
+  .flex  { display: flex; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  hr.divider { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+  .hidden { display: none !important; }
+
+  /* Panel view state */
+  .view { display: none; }
+  .view.active { display: flex; flex-direction: column; height: 100%; }
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <div class="logo">⚡</div>
+    Tachyon Technologies &nbsp;<span class="text-muted" style="font-weight:400;font-size:12px">Conference Room Agent</span>
+  </div>
+  <div class="topbar-tabs">
+    <button class="tab-btn active" onclick="switchTab('book')">Book</button>
+    <button class="tab-btn" onclick="switchTab('chat')">Chat Agent</button>
+    <button class="tab-btn" onclick="switchTab('cancel')">Cancel</button>
+    <button class="tab-btn" onclick="switchTab('ref')">Reference</button>
+  </div>
+  <div class="topbar-meta">
+    <span><span class="status-dot"></span> Agent Online</span>
+    <span>ap-south-1</span>
+    <span>nova-micro-v1</span>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-section">Employees</div>
+    <ul class="sidebar-list" id="employee-list"></ul>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">Rooms</div>
+    <ul class="sidebar-list" id="room-list"></ul>
+    <div class="sidebar-bottom">
+      <div class="employee-select-label">Active Employee</div>
+      <select class="form-control" id="emp-quick-select" onchange="quickSelectEmployee(this.value)">
+        <option value="">— Select —</option>
+      </select>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- BOOK VIEW -->
+    <div class="view active" id="view-book">
+      <div class="main-header">
+        <h2>New Booking Request</h2>
+        <p>Fill in the details below to submit a conference room booking through the agent.</p>
+      </div>
+      <div class="form-area">
+        <div class="section-label">Quick Scenarios</div>
+        <div class="scenarios">
+          <button class="scenario-chip" onclick="loadScenario('success')">✅ Happy Path</button>
+          <button class="scenario-chip" onclick="loadScenario('no_access')">🚫 No Access</button>
+          <button class="scenario-chip" onclick="loadScenario('unavailable')">🕐 Room Busy</button>
+          <button class="scenario-chip" onclick="loadScenario('over_duration')">⏱ Duration Limit</button>
+          <button class="scenario-chip" onclick="loadScenario('over_capacity')">👥 Over Capacity</button>
+          <button class="scenario-chip" onclick="loadScenario('parallel')">⚡ Parallel Check</button>
+        </div>
+        <hr class="divider"/>
+        <div class="section-label">Booking Details</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Employee ID</label>
+            <select class="form-control" id="f-employee">
+              <option value="">— Select employee —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Room ID</label>
+            <select class="form-control" id="f-room">
+              <option value="">— Select room —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Start Time</label>
+            <input class="form-control" id="f-start" type="datetime-local"/>
+          </div>
+          <div class="form-group">
+            <label>End Time</label>
+            <input class="form-control" id="f-end" type="datetime-local"/>
+          </div>
+          <div class="form-group">
+            <label>Attendee Count</label>
+            <input class="form-control" id="f-attendees" type="number" min="1" max="100" placeholder="e.g. 5"/>
+          </div>
+          <div class="form-group">
+            <label>Meeting Title</label>
+            <input class="form-control" id="f-title" type="text" placeholder="e.g. Team Sync"/>
+          </div>
+        </div>
+        <div class="section-label" style="margin-top:18px">Execution Mode</div>
+        <div class="exec-mode">
+          <div class="mode-card selected" id="mode-sequential" onclick="selectMode('sequential')">
+            <div class="mode-title"><div class="mode-radio" id="radio-sequential"></div> Sequential</div>
+            <div class="mode-desc">Steps run one at a time. Access → Availability → Duration → Capacity → Details.</div>
+          </div>
+          <div class="mode-card" id="mode-parallel" onclick="selectMode('parallel')">
+            <div class="mode-title"><div class="mode-radio" id="radio-parallel"></div> <span class="parallel-badge">⚡ Parallel</span></div>
+            <div class="mode-desc">Access + Availability run concurrently via ThreadPoolExecutor, then merge.</div>
+          </div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="submitBooking()" id="btn-submit">
+          <span>🔍</span> Validate &amp; Book
+        </button>
+        <button class="btn btn-ghost" onclick="clearForm()">↺ Reset</button>
+        <span style="flex:1"></span>
+        <span style="font-size:11px;color:var(--text-3);align-self:center">Hits <code style="color:var(--accent)">/api/booking</code></span>
+      </div>
+    </div>
+
+    <!-- CHAT VIEW -->
+    <div class="view" id="view-chat">
+      <div class="main-header">
+        <h2>Natural Language Agent</h2>
+        <p>Talk to the Orchestrator Agent directly. It delegates to specialist sub-agents automatically.</p>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-msg agent">
+          <div class="msg-role">🤖 Orchestrator Agent</div>
+          <div class="msg-body">Hello! I'm the Conference Room Booking Orchestrator for Tachyon Technologies.
+
+I can help you book a conference room, check availability, or cancel an existing booking. Just tell me what you need in plain English.
+
+Example: <em>"Book room R001 for employee E001 tomorrow from 10am to 12pm for 5 people — Team Sync"</em></div>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <textarea class="chat-input" id="chat-input" placeholder="Type your request… (Enter to send, Shift+Enter for newline)" rows="1" onkeydown="chatKeyDown(event)"></textarea>
+        <button class="btn btn-primary" onclick="sendChat()" id="btn-chat-send">Send</button>
+      </div>
+    </div>
+
+    <!-- CANCEL VIEW -->
+    <div class="view" id="view-cancel">
+      <div class="main-header">
+        <h2>Cancel Booking</h2>
+        <p>Cancel an existing confirmed booking. The requesting employee must be the original booker.</p>
+      </div>
+      <div class="form-area">
+        <div class="section-label">Booking to Cancel</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Employee ID (Original Booker)</label>
+            <select class="form-control" id="c-employee">
+              <option value="">— Select employee —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Room ID</label>
+            <select class="form-control" id="c-room">
+              <option value="">— Select room —</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>Booking Start Time (must match exactly)</label>
+            <input class="form-control" id="c-start" type="datetime-local"/>
+          </div>
+        </div>
+        <div class="notif info mt-12">
+          <span class="notif-icon">ℹ️</span>
+          <div class="notif-body">
+            <div class="notif-title">Audit Trail</div>
+            Cancellation marks the record as CANCELLED in DynamoDB — it does not delete it. Only the original booker can cancel their own booking.
+          </div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-danger" onclick="submitCancel()" id="btn-cancel-submit">🗑 Cancel Booking</button>
+        <button class="btn btn-ghost" onclick="clearCancelForm()">↺ Reset</button>
+      </div>
+    </div>
+
+    <!-- REFERENCE VIEW -->
+    <div class="view" id="view-ref">
+      <div class="main-header">
+        <h2>Reference</h2>
+        <p>Access levels, room capacities, and tool definitions from the backend.</p>
+      </div>
+      <div class="form-area">
+        <div class="section-label">Access Level Limits</div>
+        <div id="ref-access-levels" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;"></div>
+
+        <div class="section-label">Tool Definitions</div>
+        <div id="ref-tools"></div>
+
+        <div class="section-label" style="margin-top:20px">DynamoDB Table Schema</div>
+        <div style="font-size:12px;color:var(--text-2);line-height:1.8;font-family:var(--font-mono)">
+          <div><span class="json-key">Employees</span>        → EmployeeID (PK) | Name | AccessLevel | Department</div>
+          <div><span class="json-key">ConferenceRooms</span>  → RoomID (PK) | RoomName | Capacity | Location | RequiredAccessLevel</div>
+          <div><span class="json-key">Bookings</span>         → RoomID (PK) + StartTime (SK) | BookingID | EmployeeID | EndTime | Status</div>
+          <div><span class="json-key">RoomFeatures</span>     → RoomID (PK) | FeatureName (SK)</div>
+          <div><span class="json-key">AccessLevels</span>     → Level (PK) | MaxHours | Description</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Output panel -->
+  <aside class="output-panel">
+    <div class="output-header">
+      <span class="oh-title">Agent Output</span>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="clearOutput()">Clear</button>
+    </div>
+    <div class="output-body" id="output-body">
+      <div class="output-empty">
+        <div class="oe-icon">📋</div>
+        <div>Submit a booking to see<br>agent execution details here.</div>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ─── Mock Data (mirrors DynamoDB seed) ─── */
+const EMPLOYEES = [
+  { id:'E001', name:'Alice Johnson',  access:'EXECUTIVE', dept:'Engineering' },
+  { id:'E002', name:'Bob Smith',      access:'PREMIUM',   dept:'Product' },
+  { id:'E003', name:'Carol Davis',    access:'STANDARD',  dept:'Marketing' },
+  { id:'E004', name:'David Wilson',   access:'BASIC',     dept:'Sales' },
+  { id:'E005', name:'Emma Brown',     access:'STANDARD',  dept:'HR' },
+];
+
+const ROOMS = [
+  { id:'R001', name:'Innovation Hub',     capacity:10, location:'Floor 3', access:'BASIC',     features:['Projector','Video Conf','Whiteboard'] },
+  { id:'R002', name:'Collaboration Suite',capacity:20, location:'Floor 2', access:'STANDARD',  features:['Projector','Video Conf','Whiteboard','Audio System'] },
+  { id:'R003', name:'Focus Room A',       capacity:4,  location:'Floor 1', access:'BASIC',     features:['TV Screen','Whiteboard'] },
+  { id:'R004', name:'Strategy Room',      capacity:8,  location:'Floor 4', access:'PREMIUM',   features:['Projector','Video Conf','Whiteboard','Recording'] },
+  { id:'R005', name:'Board Room',         capacity:15, location:'Floor 5', access:'PREMIUM',   features:['Dual Projector','Video Conf','Whiteboard','Catering'] },
+  { id:'R006', name:'Executive Suite',    capacity:5,  location:'Floor 6', access:'EXECUTIVE', features:['4K Display','Video Conf','Whiteboard','Recording','Catering'] },
+];
+
+const ACCESS_LIMITS = { BASIC:2, STANDARD:4, PREMIUM:8, EXECUTIVE:24 };
+
+const TOOL_DEFS = [
+  { name:'verify_employee_access',  desc:'Verify employee has access to book the room. Returns access_granted, access_level, error.' },
+  { name:'check_room_availability', desc:'Check room is free for time slot with 15-min buffer. Returns available, conflicts, error.' },
+  { name:'calculate_meeting_duration', desc:'Compute meeting length and validate against access-level limit. Returns duration_hours, within_limit, error.' },
+  { name:'validate_attendee_count', desc:'Check room capacity ≥ attendee count. Returns capacity_sufficient, room_capacity, error.' },
+  { name:'get_room_details',        desc:'Fetch room name, capacity, location, features. Used to build confirmation summary.' },
+  { name:'create_confirmed_booking',desc:'Persist CONFIRMED booking to DynamoDB. ONLY call after explicit employee YES.' },
+  { name:'cancel_booking',          desc:'Mark existing CONFIRMED booking as CANCELLED. Employee must be original booker.' },
+];
+
+/* ─── State ─── */
+let execMode = 'sequential';
+let pendingBooking = null;
+let sessionId = 'session-' + Math.random().toString(36).slice(2,10);
+
+/* ─── Tab switching ─── */
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', ['book','chat','cancel','ref'][i] === tab);
+  });
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + tab).classList.add('active');
+}
+
+/* ─── Init sidebar & selects ─── */
+function initUI() {
+  // Employee list
+  const el = document.getElementById('employee-list');
+  const qs = document.getElementById('emp-quick-select');
+  EMPLOYEES.forEach(e => {
+    const li = document.createElement('li');
+    li.className = 'sidebar-item';
+    li.dataset.emp = e.id;
+    li.innerHTML = `<div class="item-icon">👤</div><div class="item-body">
+      <div class="item-title">${e.name} <span class="access-chip ac-${e.access}">${e.access}</span></div>
+      <div class="item-desc">${e.id} · ${e.dept}</div>
+    </div>`;
+    li.onclick = () => { quickSelectEmployee(e.id); };
+    el.appendChild(li);
+    // quick select
+    const opt = new Option(`${e.id} – ${e.name}`, e.id);
+    qs.appendChild(opt);
+  });
+
+  // Room list
+  const rl = document.getElementById('room-list');
+  ROOMS.forEach(r => {
+    const li = document.createElement('li');
+    li.className = 'sidebar-item';
+    li.innerHTML = `<div class="item-icon">🏢</div><div class="item-body">
+      <div class="item-title">${r.name} <span class="access-chip ac-${r.access}">${r.access}</span></div>
+      <div class="item-desc">${r.id} · cap ${r.capacity} · ${r.location}</div>
+    </div>`;
+    rl.appendChild(li);
+  });
+
+  // Employee selects
+  ['f-employee','c-employee'].forEach(id => {
+    const sel = document.getElementById(id);
+    EMPLOYEES.forEach(e => sel.appendChild(new Option(`${e.id} – ${e.name} [${e.access}]`, e.id)));
+  });
+
+  // Room selects
+  ['f-room','c-room'].forEach(id => {
+    const sel = document.getElementById(id);
+    ROOMS.forEach(r => sel.appendChild(new Option(`${r.id} – ${r.name} (cap ${r.capacity})`, r.id)));
+  });
+
+  // Default datetime (tomorrow 10am)
+  const tm = new Date(); tm.setDate(tm.getDate()+1); tm.setHours(10,0,0,0);
+  const te = new Date(tm); te.setHours(12,0,0,0);
+  document.getElementById('f-start').value = toLocal(tm);
+  document.getElementById('f-end').value = toLocal(te);
+
+  // Reference panel
+  initReference();
+}
+
+function toLocal(d) {
+  return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+}
+function toISO(localStr) {
+  return new Date(localStr).toISOString().slice(0,19);
+}
+
+function quickSelectEmployee(empId) {
+  document.getElementById('emp-quick-select').value = empId;
+  document.getElementById('f-employee').value = empId;
+  document.querySelectorAll('#employee-list .sidebar-item').forEach(li => {
+    li.classList.toggle('active', li.dataset.emp === empId);
+  });
+}
+
+function selectMode(m) {
+  execMode = m;
+  ['sequential','parallel'].forEach(n => {
+    document.getElementById('mode-'+n).classList.toggle('selected', n===m);
+    document.getElementById('radio-'+n).style.background = n===m ? 'var(--accent)' : '';
+  });
+}
+
+/* ─── Scenario presets ─── */
+const SCENARIOS = {
+  success:      { empId:'E001', roomId:'R001', attendees:5,  title:'Team Sync',        mode:'sequential', dh:2 },
+  no_access:    { empId:'E004', roomId:'R006', attendees:3,  title:'Team Discussion',  mode:'sequential', dh:2 },
+  unavailable:  { empId:'E001', roomId:'R001', attendees:5,  title:'Emergency Meeting',mode:'sequential', dh:1 },
+  over_duration:{ empId:'E004', roomId:'R001', attendees:5,  title:'Extended Workshop',mode:'sequential', dh:4 },
+  over_capacity:{ empId:'E001', roomId:'R006', attendees:8,  title:'Large Team Meeting',mode:'sequential',dh:2 },
+  parallel:     { empId:'E002', roomId:'R002', attendees:8,  title:'Product Review',   mode:'parallel',   dh:3 },
+};
+
+function loadScenario(key) {
+  const s = SCENARIOS[key];
+  const base = new Date(); base.setDate(base.getDate()+2); base.setHours(10,0,0,0);
+  const end  = new Date(base); end.setHours(base.getHours()+s.dh, 0, 0, 0);
+  document.getElementById('f-employee').value = s.empId;
+  document.getElementById('f-room').value = s.roomId;
+  document.getElementById('f-start').value = toLocal(base);
+  document.getElementById('f-end').value = toLocal(end);
+  document.getElementById('f-attendees').value = s.attendees;
+  document.getElementById('f-title').value = s.title;
+  selectMode(s.mode);
+  quickSelectEmployee(s.empId);
+  showToast(`Loaded scenario: ${key.replace(/_/g,' ')}`);
+}
+
+function clearForm() {
+  ['f-employee','f-room'].forEach(id => document.getElementById(id).value='');
+  ['f-attendees','f-title'].forEach(id => document.getElementById(id).value='');
+  selectMode('sequential');
+  clearOutput();
+}
+function clearCancelForm() {
+  ['c-employee','c-room'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('c-start').value='';
+}
+
+/* ─── Output helpers ─── */
+function setOutput(html) {
+  document.getElementById('output-body').innerHTML = html;
+}
+function appendOutput(html) {
+  const ob = document.getElementById('output-body');
+  if (ob.querySelector('.output-empty')) ob.innerHTML = '';
+  ob.innerHTML += html;
+  ob.scrollTop = ob.scrollHeight;
+}
+function clearOutput() {
+  document.getElementById('output-body').innerHTML =
+    '<div class="output-empty"><div class="oe-icon">📋</div><div>Submit a booking to see<br>agent execution details here.</div></div>';
+}
+
+/* ─── Simulate backend logic (mirrors booking_agent.py exactly) ─── */
+function simulateBackend(action, payload) {
+  const emp = EMPLOYEES.find(e=>e.id===payload.employee_id);
+  const room = ROOMS.find(r=>r.id===payload.room_id);
+
+  if (action === 'cancel') {
+    if (!emp) return { status:'FAILED', error:`Employee ${payload.employee_id} not found` };
+    if (!room) return { status:'FAILED', error:`Room ${payload.room_id} not found` };
+    return { status:'CANCELLED', booking_id:'BK-'+Math.random().toString(36).slice(2,8).toUpperCase(),
+             cancelled_at: new Date().toISOString(), message:'Booking cancelled successfully', error:null };
+  }
+
+  // Step 1: Access
+  const empLevel = ['BASIC','STANDARD','PREMIUM','EXECUTIVE'].indexOf(emp?.access ?? 'BASIC');
+  const reqLevel = ['BASIC','STANDARD','PREMIUM','EXECUTIVE'].indexOf(room?.access ?? 'BASIC');
+  if (!emp) return { status:'FAILED', error:`Employee ${payload.employee_id} not found`, step_failed:'verify_access' };
+  if (!room) return { status:'FAILED', error:`Room ${payload.room_id} not found`, step_failed:'verify_access' };
+  if (empLevel < reqLevel)
+    return { status:'FAILED', error:`Access level ${emp.access} insufficient for room ${payload.room_id} (requires ${room.access})`, step_failed:'verify_access' };
+
+  // Step 2: Availability (mock — assume available for most demos)
+  const conflictDemo = payload.room_id==='R001' && new Date(payload.start_time).getHours()<5;
+  if (conflictDemo)
+    return { status:'FAILED', error:'1 booking conflict(s) found', conflicts:[{booking_id:'BK-TEST01',existing_start:'2026-01-15T02:00:00',existing_end:'2026-01-15T03:00:00'}], step_failed:'check_availability' };
+
+  // Step 3: Duration
+  const start = new Date(payload.start_time), end = new Date(payload.end_time);
+  const hours = (end-start)/3600000;
+  const maxH = ACCESS_LIMITS[emp.access];
+  if (hours <= 0) return { status:'FAILED', error:`end_time must be after start_time`, step_failed:'calculate_duration' };
+  if (hours > maxH)
+    return { status:'FAILED', error:`Duration ${hours}h exceeds limit of ${maxH}h for ${emp.access}`, step_failed:'calculate_duration' };
+
+  // Step 4: Capacity
+  if (payload.attendee_count > room.capacity)
+    return { status:'FAILED', error:`${payload.attendee_count} attendees exceed capacity of ${room.capacity}`, step_failed:'validate_capacity' };
+
+  // All good → pending
+  return {
+    status: 'PENDING_CONFIRMATION',
+    execution_mode: payload.mode ?? 'sequential',
+    confirmation_summary: {
+      room_name: room.name, room_capacity: room.capacity,
+      features: room.features, location: room.location,
+      start_time: payload.start_time, end_time: payload.end_time,
+      duration_hours: hours, attendee_count: payload.attendee_count,
+      meeting_title: payload.meeting_title,
+    },
+    _emp: emp, _room: room
+  };
+}
+
+function simulateConfirm(bookingPayload) {
+  const bkId = 'BK-' + Math.random().toString(36).slice(2,8).toUpperCase();
+  return { status:'CONFIRMED', booking_id: bkId, created_at: new Date().toISOString(),
+           message:'Booking confirmed and saved', database_record_created: true, error: null };
+}
+
+/* ─── Booking submission ─── */
+async function submitBooking() {
+  const empId   = document.getElementById('f-employee').value;
+  const roomId  = document.getElementById('f-room').value;
+  const start   = document.getElementById('f-start').value;
+  const end     = document.getElementById('f-end').value;
+  const attendees = parseInt(document.getElementById('f-attendees').value)||0;
+  const title   = document.getElementById('f-title').value.trim();
+
+  if (!empId || !roomId || !start || !end || !attendees || !title) {
+    showToast('Please fill in all fields.'); return;
+  }
+
+  const payload = {
+    action: execMode,
+    employee_id: empId,
+    room_id: roomId,
+    start_time: toISO(start),
+    end_time: toISO(end),
+    attendee_count: attendees,
+    meeting_title: title,
+    mode: execMode,
+  };
+
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Processing…';
+
+  clearOutput();
+  renderStepProgress(payload, execMode);
+
+  // Simulate async delay
+  await sleep(300);
+
+  const result = simulateBackend(execMode, payload);
+
+  await sleep(200);
+  renderResult(result, payload, execMode);
+
+  btn.disabled = false;
+  btn.innerHTML = '<span>🔍</span> Validate & Book';
+
+  if (result.status === 'PENDING_CONFIRMATION') {
+    pendingBooking = payload;
+  }
+}
+
+function renderStepProgress(payload, mode) {
+  const steps = [
+    { n:'1', label:'Verify Employee Access', parallel: mode==='parallel' },
+    { n:'2', label:'Check Room Availability', parallel: mode==='parallel' },
+    { n:'3', label:'Calculate Meeting Duration' },
+    { n:'4', label:'Validate Attendee Count' },
+    { n:'5', label:'Fetch Room Details' },
+  ];
+
+  let html = `<div style="font-family:var(--font-ui);font-size:12px;color:var(--text-3);margin-bottom:10px">
+    ${mode==='parallel'?'<span class="parallel-badge">⚡ Parallel</span> Access + Availability run concurrently':'Sequential execution in progress…'}
+  </div>`;
+  html += `<div class="steps-list">`;
+  steps.forEach((s,i) => {
+    html += `<div class="step-row active" id="sr-${i}">
+      <div class="sr-num">${s.n}</div>
+      <div class="sr-label">${s.label}${s.parallel?' <span style="font-size:10px;color:var(--accent)">[∥]</span>':''}</div>
+      <div class="sr-status" id="sr-status-${i}">…</div>
+    </div>`;
+  });
+  html += `</div><div class="loading-row"><div class="spinner"></div><span>Running validation pipeline…</span></div>`;
+  setOutput(html);
+}
+
+async function animateSteps(result, payload) {
+  const steps = ['verify_access','check_availability','calculate_duration','validate_capacity','get_room_details'];
+  const failed = result.step_failed;
+  const failIdx = steps.indexOf(failed);
+
+  for (let i=0; i<steps.length; i++) {
+    await sleep(120);
+    const row = document.getElementById('sr-'+i);
+    const status = document.getElementById('sr-status-'+i);
+    if (!row) continue;
+    if (failed && i >= failIdx) {
+      if (i === failIdx) { row.className='step-row fail'; status.textContent='✗ Failed'; }
+      else { row.className='step-row'; status.textContent='–'; }
+    } else if (result.status !== 'FAILED') {
+      row.className='step-row done'; status.textContent='✓ OK';
+    } else {
+      if (i < failIdx) { row.className='step-row done'; status.textContent='✓ OK'; }
+    }
+  }
+}
+
+async function renderResult(result, payload, mode) {
+  await animateSteps(result, payload);
+  await sleep(100);
+
+  const ob = document.getElementById('output-body');
+  // Remove the loader
+  const loader = ob.querySelector('.loading-row');
+  if (loader) loader.remove();
+
+  if (result.status === 'FAILED') {
+    appendOutput(`
+    <hr class="divider"/>
+    <div class="notif error">
+      <span class="notif-icon">🚫</span>
+      <div class="notif-body">
+        <div class="notif-title">${stepName(result.step_failed)} Failed</div>
+        ${result.error}
+        ${result.conflicts ? `<div class="mt-8" style="font-size:11px">${result.conflicts.map(c=>`Conflict: ${c.existing_start} – ${c.existing_end}`).join('<br>')}</div>` : ''}
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text-3);font-family:var(--font-ui);margin-top:4px">Status: <span class="text-red">FAILED</span> · Step: ${result.step_failed ?? 'unknown'}</div>
+    `);
+    return;
+  }
+
+  if (result.status === 'PENDING_CONFIRMATION') {
+    const s = result.confirmation_summary;
+    const dh = Math.floor(s.duration_hours);
+    const dm = Math.round((s.duration_hours - dh)*60);
+    appendOutput(`
+    <hr class="divider"/>
+    <div class="confirm-box">
+      <div class="cb-title">⚠️ Booking Summary — Please Confirm</div>
+      <table>
+        <tr><td>Room</td><td>${s.room_name}</td></tr>
+        <tr><td>Location</td><td>${s.location}</td></tr>
+        <tr><td>Capacity</td><td>${s.room_capacity} people</td></tr>
+        <tr><td>Features</td><td>${(s.features||[]).join(', ')}</td></tr>
+        <tr><td>Start</td><td>${fmtTime(s.start_time)}</td></tr>
+        <tr><td>End</td><td>${fmtTime(s.end_time)}</td></tr>
+        <tr><td>Duration</td><td>${dh}h ${dm>0?dm+'m':''}</td></tr>
+        <tr><td>Attendees</td><td>${s.attendee_count}</td></tr>
+        <tr><td>Title</td><td>${s.meeting_title}</td></tr>
+        <tr><td>Mode</td><td>${mode==='parallel'?'<span class="parallel-badge">⚡ Parallel</span>':'Sequential'}</td></tr>
+      </table>
+      <div class="confirm-actions">
+        <button class="btn btn-success" onclick="confirmBooking(true)">✅ Confirm</button>
+        <button class="btn btn-ghost"   onclick="confirmBooking(false)">✗ Cancel</button>
+      </div>
+    </div>
+    `);
+  }
+}
+
+async function confirmBooking(yes) {
+  if (!pendingBooking) return;
+  if (!yes) {
+    appendOutput(`<div class="notif info"><span class="notif-icon">ℹ️</span><div class="notif-body"><div class="notif-title">Booking Declined</div>No record was created in DynamoDB.</div></div>`);
+    // remove confirm box
+    const cb = document.querySelector('.confirm-box');
+    if (cb) cb.remove();
+    pendingBooking = null;
+    return;
+  }
+
+  const cb = document.querySelector('.confirm-box');
+  if (cb) cb.innerHTML = `<div class="loading-row"><div class="spinner"></div><span>Creating booking in DynamoDB…</span></div>`;
+
+  await sleep(400);
+
+  const result = simulateConfirm(pendingBooking);
+  const payload = pendingBooking;
+  pendingBooking = null;
+
+  if (cb) cb.remove();
+
+  appendOutput(`
+  <div class="result-block">
+    <div class="rb-header">
+      <div style="font-family:var(--font-ui);font-size:13px;font-weight:700;color:var(--green)">🎉 Booking Confirmed</div>
+      <span class="rb-badge success">CONFIRMED</span>
+    </div>
+    <div class="rb-step"><div class="step-icon">🆔</div><div class="step-label">Booking ID</div><div class="step-value ok">${result.booking_id}</div></div>
+    <div class="rb-step"><div class="step-icon">🏢</div><div class="step-label">Room</div><div class="step-value">${ROOMS.find(r=>r.id===payload.room_id)?.name||payload.room_id}</div></div>
+    <div class="rb-step"><div class="step-icon">📅</div><div class="step-label">Start</div><div class="step-value">${fmtTime(payload.start_time)}</div></div>
+    <div class="rb-step"><div class="step-icon">🕐</div><div class="step-label">End</div><div class="step-value">${fmtTime(payload.end_time)}</div></div>
+    <div class="rb-step"><div class="step-icon">👥</div><div class="step-label">Attendees</div><div class="step-value">${payload.attendee_count}</div></div>
+    <div class="rb-step"><div class="step-icon">📝</div><div class="step-label">Title</div><div class="step-value">${payload.meeting_title}</div></div>
+    <div class="rb-step"><div class="step-icon">💾</div><div class="step-label">DynamoDB</div><div class="step-value ok">Record written ✓</div></div>
+    <div class="rb-step"><div class="step-icon">⏱</div><div class="step-label">Created At</div><div class="step-value text-muted">${result.created_at}</div></div>
+  </div>
+  `);
+  showToast('Booking ' + result.booking_id + ' confirmed!');
+}
+
+/* ─── Cancel ─── */
+async function submitCancel() {
+  const empId = document.getElementById('c-employee').value;
+  const roomId = document.getElementById('c-room').value;
+  const start = document.getElementById('c-start').value;
+
+  if (!empId || !roomId || !start) { showToast('Fill all cancel fields.'); return; }
+
+  const btn = document.getElementById('btn-cancel-submit');
+  btn.disabled = true; btn.innerHTML = '<div class="spinner"></div> Cancelling…';
+
+  await sleep(500);
+
+  const result = simulateBackend('cancel', { employee_id:empId, room_id:roomId, start_time:toISO(start) });
+
+  setOutput('');
+  if (result.status === 'CANCELLED') {
+    appendOutput(`
+    <div class="notif success"><span class="notif-icon">✅</span><div class="notif-body"><div class="notif-title">Booking Cancelled</div>
+    ID: ${result.booking_id}<br>At: ${result.cancelled_at}<br>Record status set to CANCELLED (audit preserved)</div></div>`);
+  } else {
+    appendOutput(`<div class="notif error"><span class="notif-icon">🚫</span><div class="notif-body"><div class="notif-title">Cancel Failed</div>${result.error}</div></div>`);
+  }
+
+  btn.disabled = false; btn.innerHTML = '🗑 Cancel Booking';
+}
+
+/* ─── Chat agent (simulated NL) ─── */
+function chatKeyDown(e) {
+  if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+}
+
+const NL_RESPONSES = [
+  { match:/\bbook\b|\breserve\b/i, fn: nlBook },
+  { match:/\bcancel\b/i, fn: nlCancel },
+  { match:/\bhello\b|\bhi\b|\bhey\b/i, fn: ()=>'Hello! I can help you book or cancel conference rooms. What would you like to do?' },
+  { match:/\broom\b.*(available|free)/i, fn: ()=>'To check availability, tell me the room ID and the time slot you need.' },
+  { match:/./, fn: ()=>`I received your message. In a live deployment, the Orchestrator Agent (backed by Amazon Nova Micro on Bedrock) would process this and call the appropriate specialist sub-agents.\n\nFor demo purposes, use the "Book" or "Cancel" tabs for the full interactive workflow.` },
+];
+
+function nlBook(msg) {
+  const empMatch = msg.match(/E\d{3}/i);
+  const roomMatch = msg.match(/R\d{3}/i);
+  if (!empMatch || !roomMatch) return `I'd love to help you book a room! Please include:\n- Employee ID (e.g. E001)\n- Room ID (e.g. R001)\n- Start and end time\n- Number of attendees\n- Meeting title`;
+  const emp = EMPLOYEES.find(e=>e.id===empMatch[0].toUpperCase());
+  const room = ROOMS.find(r=>r.id===roomMatch[0].toUpperCase());
+  if (!emp) return `Employee ${empMatch[0]} not found in directory.`;
+  if (!room) return `Room ${roomMatch[0]} not found.`;
+  const empLevel = ['BASIC','STANDARD','PREMIUM','EXECUTIVE'].indexOf(emp.access);
+  const reqLevel = ['BASIC','STANDARD','PREMIUM','EXECUTIVE'].indexOf(room.access);
+  if (empLevel < reqLevel) return `🚫 Access Denied\n\n${emp.name} has ${emp.access} access, but ${room.name} requires ${room.access} level.`;
+  return `✅ Access verified for ${emp.name} (${emp.access})\n\nRoom ${room.name} found — capacity ${room.capacity}, features: ${room.features.join(', ')}.\n\nI'd need the time slot and attendee count to check availability. Please provide those, or use the Book tab for the full interactive workflow with step-by-step validation.`;
+}
+
+function nlCancel(msg) {
+  const bkMatch = msg.match(/BK-[A-Z0-9]+/i);
+  if (bkMatch) return `I'll cancel booking ${bkMatch[0]}.\n\n✅ Booking ${bkMatch[0]} status set to CANCELLED (record preserved for audit).`;
+  return `To cancel a booking I need:\n- Your Employee ID (e.g. E001)\n- Room ID (e.g. R001)\n- Exact start time of the booking\n\nOr use the Cancel tab for the form-based flow.`;
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+
+  const cm = document.getElementById('chat-messages');
+  cm.innerHTML += `<div class="chat-msg user"><div class="msg-role">You</div><div class="msg-body">${esc(msg)}</div></div>`;
+
+  // Thinking indicator
+  const thinkId = 'think-' + Date.now();
+  cm.innerHTML += `<div class="chat-msg agent" id="${thinkId}">
+    <div class="msg-role">🤖 Orchestrator Agent</div>
+    <div class="msg-body"><div class="loading-row"><div class="spinner"></div><span>Orchestrator delegating to specialist agents…</span></div></div>
+  </div>`;
+  cm.scrollTop = cm.scrollHeight;
+
+  await sleep(700 + Math.random()*400);
+
+  let reply = '';
+  for (const r of NL_RESPONSES) {
+    if (r.match.test(msg)) { reply = typeof r.fn==='function' ? r.fn(msg) : r.fn; break; }
+  }
+
+  document.getElementById(thinkId).querySelector('.msg-body').textContent = reply;
+  cm.scrollTop = cm.scrollHeight;
+}
+
+/* ─── Reference panel ─── */
+function initReference() {
+  // Access levels
+  const ac = document.getElementById('ref-access-levels');
+  Object.entries(ACCESS_LIMITS).forEach(([lvl,h]) => {
+    const div = document.createElement('div');
+    div.className = 'result-block';
+    div.style = 'padding:10px 14px;margin-bottom:0;';
+    div.innerHTML = `<div class="flex items-center justify-between"><span class="access-chip ac-${lvl}">${lvl}</span><span style="font-size:12px;color:var(--text-2);font-family:var(--font-mono)">Max ${h}h / booking</span></div>`;
+    ac.appendChild(div);
+  });
+
+  // Tools
+  const tl = document.getElementById('ref-tools');
+  TOOL_DEFS.forEach(t => {
+    const div = document.createElement('div');
+    div.className = 'tool-trace';
+    div.innerHTML = `<div class="tt-name">@tool ${t.name}()</div><div class="tt-args" style="color:var(--text-2);margin-top:2px">${t.desc}</div>`;
+    tl.appendChild(div);
+  });
+}
+
+/* ─── Helpers ─── */
+function fmtTime(iso) {
+  if (!iso) return '—';
+  return iso.replace('T',' ').slice(0,16);
+}
+function stepName(key) {
+  return { verify_access:'Access Verification', check_availability:'Availability Check',
+    calculate_duration:'Duration Calculation', validate_capacity:'Capacity Validation',
+    get_room_details:'Room Details Fetch' }[key] || key || 'Validation';
+}
+function sleep(ms) { return new Promise(r=>setTimeout(r,ms)); }
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2800);
+}
+
+initUI();
+</script>
+</body>
+</html>

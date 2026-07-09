@@ -67,7 +67,8 @@ def main():
 
     print(f"\nsession_id: {session_id}")
     try:
-        print(json.dumps(json.loads(body), indent=2))
+        # Line 70 — fixed
+        print(json.dumps(json.loads(body), indent=2, ensure_ascii=False))
     except json.JSONDecodeError:
         print(body)
 
